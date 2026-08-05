@@ -1,0 +1,29 @@
+# Dev overlay: bind-mount source for live reload.
+# Usage: docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build
+#
+# Do NOT use this overlay for the Windows installer under Program Files —
+# creating the anonymous /app/node_modules mountpoint there fails (ACL: Users RX).
+
+services:
+  api:
+    volumes:
+      - ../apps/api:/app
+      - ../packages:/packages
+      - ../workers:/workers
+
+  importer-worker:
+    volumes:
+      - ../apps/api:/app
+      - ../packages:/packages
+      - ../workers:/workers
+
+  recommender-worker:
+    volumes:
+      - ../apps/api:/app
+      - ../packages:/packages
+      - ../workers:/workers
+
+  web:
+    volumes:
+      - ../apps/web:/app
+      - /app/node_modules

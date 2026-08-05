@@ -16,7 +16,9 @@ COPY apps/api /app
 ENV PYTHONPATH=/:/packages:/app
 
 COPY infra/entrypoint-api.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Normalize CRLF (Windows checkouts) so shebang exec does not fail with
+# "no such file or directory" looking for /bin/sh\r.
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 # Drop root: run the API as an unprivileged user.
 RUN useradd --create-home --uid 10001 appuser

@@ -21,6 +21,14 @@ cp .env.example .env
 docker compose -f infra/docker-compose.yml up --build
 ```
 
+For live-reload bind mounts while developing inside Docker:
+
+```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build
+```
+
+(The Windows installer uses the base compose file only — no bind mounts — so Program Files ACLs cannot block the web container.)
+
 - Web: http://localhost:5173
 - API docs: http://localhost:8000/docs
 - Postgres: localhost:5432

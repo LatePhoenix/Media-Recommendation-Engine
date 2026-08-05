@@ -7,7 +7,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-ROOT = Path(__file__).resolve().parents[3]
+_HERE = Path(__file__).resolve()
+# Monorepo: <repo>/apps/api/app/main.py → parents[3] is repo root.
+# Container: /app/app/main.py → packages mounted/copied at /packages.
+if len(_HERE.parents) > 3 and (_HERE.parents[3] / "packages").is_dir():
+    ROOT = _HERE.parents[3]
+elif Path("/packages").is_dir():
+    ROOT = Path("/")
+else:
+    ROOT = _HERE.parents[1]
 for path in (ROOT, ROOT / "packages"):
     s = str(path)
     if s not in sys.path:

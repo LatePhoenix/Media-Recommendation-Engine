@@ -31,7 +31,7 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.api
     env_file:
-      - ../.env.example
+      - ../.env
     environment:
       DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
       REDIS_URL: redis://redis:6379/0
@@ -44,19 +44,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ../apps/api:/app
-      - ../packages:/packages
-      - ../workers:/workers
 
   importer-worker:
     build:
       context: ..
       dockerfile: infra/Dockerfile.api
-    command: rq worker imports --url redis://redis:6379/0
+    # Skip image ENTRYPOINT (migrate/seed) — only the API should migrate.
+    entrypoint: ["rq", "worker", "imports", "--url", "redis://redis:6379/0"]
     working_dir: /app
     env_file:
-      - ../.env.example
+      - ../.env
     environment:
       DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
       REDIS_URL: redis://redis:6379/0
@@ -66,19 +63,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ../apps/api:/app
-      - ../packages:/packages
-      - ../workers:/workers
 
   recommender-worker:
     build:
       context: ..
       dockerfile: infra/Dockerfile.api
-    command: rq worker recommender --url redis://redis:6379/0
+    entrypoint: ["rq", "worker", "recommender", "--url", "redis://redis:6379/0"]
     working_dir: /app
     env_file:
-      - ../.env.example
+      - ../.env
     environment:
       DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
       REDIS_URL: redis://redis:6379/0
@@ -89,10 +82,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ../apps/api:/app
-      - ../packages:/packages
-      - ../workers:/workers
 
   web:
     build:
@@ -104,9 +93,6 @@ services:
       - "5173:5173"
     depends_on:
       - api
-    volumes:
-      - ../apps/web:/app
-      - /app/node_modules
 
   # Optional — uncomment when using Stage 6 enrichment locally
   # ollama:
