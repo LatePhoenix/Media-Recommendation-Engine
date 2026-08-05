@@ -1,0 +1,121 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mediarec}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mediarec}
+      POSTGRES_DB: ${POSTGRES_DB:-mediarec}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mediarec}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    env_file:
+      - ../.env.example
+    environment:
+      DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
+      REDIS_URL: redis://redis:6379/0
+      API_CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://web:5173
+      PYTHONPATH: /:/packages:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../apps/api:/app
+      - ../packages:/packages
+      - ../workers:/workers
+
+  importer-worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    command: rq worker imports --url redis://redis:6379/0
+    working_dir: /app
+    env_file:
+      - ../.env.example
+    environment:
+      DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
+      REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /:/packages:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../apps/api:/app
+      - ../packages:/packages
+      - ../workers:/workers
+
+  recommender-worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    command: rq worker recommender --url redis://redis:6379/0
+    working_dir: /app
+    env_file:
+      - ../.env.example
+    environment:
+      DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
+      REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /:/packages:/app
+      ENRICHMENT_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../apps/api:/app
+      - ../packages:/packages
+      - ../workers:/workers
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    volumes:
+      - ../apps/web:/app
+      - /app/node_modules
+
+  # Optional — uncomment when using Stage 6 enrichment locally
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+
+volumes:
+  pgdata:
+  # ollama_data:
