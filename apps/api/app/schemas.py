@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models import (
     ImportJobStatus,
@@ -93,9 +93,24 @@ class InteractionCreate(BaseModel):
     context: InteractionContext | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("rating_label")
+    @classmethod
+    def _known_rating_label(cls, v: str | None) -> str | None:
+        # Reject unknown labels at validation time (HTTP 422) rather than letting
+        # them raise a ValueError deep in the handler (HTTP 500).
+        if v is None:
+            return v
+        from app.auth import RATING_LABEL_TO_VALUE  # lazy import avoids import cycle
+
+        if v not in RATING_LABEL_TO_VALUE:
+            raise ValueError(
+                f"Unknown rating_label {v!r}; valid values: {sorted(RATING_LABEL_TO_VALUE)}"
+            )
+        return v
+
 
 class InteractionBatchCreate(BaseModel):
-    interactions: list[InteractionCreate]
+    interactions: list[InteractionCreate] = Field(min_length=1, max_length=500)
 
 
 class InteractionOut(BaseModel):
@@ -189,4 +204,4 @@ class ImportJobOut(BaseModel):
 class CsvImportPayload(BaseModel):
     """Manual CSV-like rows: title,media_type,year,genres,creators,rating_label"""
 
-    rows: list[dict[str, Any]]
+    rows: list[dict[str, Any]] = Field(min_length=1, max_length=1000)

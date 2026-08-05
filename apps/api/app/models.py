@@ -70,6 +70,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
+    # Bumped to revoke all outstanding JWTs for this user (logout-all / password reset).
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     enabled_media_types: Mapped[list] = mapped_column(
         JSONB, default=lambda: ["movie", "tv", "audiobook", "comic"]
     )

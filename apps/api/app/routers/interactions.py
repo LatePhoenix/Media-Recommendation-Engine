@@ -48,9 +48,10 @@ def post_interaction(
     db: Session = Depends(get_db),
 ) -> UserInteraction:
     row = create_interaction(db, user, payload)
-    db.commit()
-    db.refresh(row)
-    # Lightweight online update: bump preference cache stamp
+    db.flush()
+    db.refresh(row)  # populate server-side timestamp within the same transaction
+    # Lightweight online update: bump preference cache stamp — committed atomically
+    # together with the interaction row so the two can't diverge on a crash.
     prefs = dict(user.preferences or {})
     prefs["last_interaction_at"] = row.timestamp.isoformat() if row.timestamp else None
     user.preferences = prefs
@@ -67,12 +68,12 @@ def post_interactions_batch(
     db: Session = Depends(get_db),
 ) -> list[UserInteraction]:
     rows = [create_interaction(db, user, item) for item in payload.interactions]
-    db.commit()
+    db.flush()
     for row in rows:
-        db.refresh(row)
+        db.refresh(row)  # populate server-side timestamps within the same transaction
     prefs = dict(user.preferences or {})
     prefs["last_interaction_at"] = rows[-1].timestamp.isoformat() if rows else None
     user.preferences = prefs
     db.add(user)
-    db.commit()
+    db.commit()  # single atomic commit for the whole batch + preference stamp
     return rows

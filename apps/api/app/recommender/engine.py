@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -340,13 +340,18 @@ def generate_feed(
     weights = get_weights(db, enabled[0])
     profile = build_user_profile(db, user.id)
 
+    # Exclude already-consumed/rated items at the SQL layer (they are hard-suppressed
+    # later anyway) — except for pass_resurface, which intentionally revisits passed
+    # items and must not have its candidate pool narrowed by this filter.
     exclude = set(profile["consumed_ids"]) | set(profile["rated_item_ids"])
+    if feed_key == "pass_resurface":
+        exclude = set()
     only_local = feed_key == "from_your_servers"
-    pool = retrieve_candidates(db, enabled, exclude_ids=set(), limit=500, only_local=only_local)
+    pool = retrieve_candidates(db, enabled, exclude_ids=exclude, limit=500, only_local=only_local)
 
     # If local pool empty, fall back to catalog for that feed
     if only_local and not pool:
-        pool = retrieve_candidates(db, enabled, exclude_ids=set(), limit=500, only_local=False)
+        pool = retrieve_candidates(db, enabled, exclude_ids=exclude, limit=500, only_local=False)
 
     scored = score_candidates(pool, profile, weights, feed_key, settings.pass_cooldown_days)
     ranked = diversify(scored, limit=limit)
@@ -370,7 +375,10 @@ def generate_feed(
     liked = profile.get("liked_titles") or []
     for rank, cand in enumerate(ranked, start=1):
         explanation = _template_explanation(cand.item.title, cand.factors, liked)
+        # Assign the id client-side so we can reference it without flushing every
+        # iteration; all events are persisted together on the single commit below.
         event = RecommendationEvent(
+            id=uuid4(),
             user_id=user.id,
             item_id=cand.item.id,
             list_id=rec_list.id,
@@ -381,7 +389,6 @@ def generate_feed(
             explanation=explanation,
         )
         db.add(event)
-        db.flush()
         cards.append(
             RecommendationCard(
                 event_id=event.id,

@@ -6,9 +6,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
+from app.net_security import validate_public_url
 from app.models import (
     ImportJob,
     ImportJobStatus,
@@ -28,6 +30,26 @@ from workers.importers.plex import PlexConnector
 from workers.importers.trakt import TraktConnector
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_error(exc: Exception) -> str:
+    """Map an exception to a client-safe message. Full detail is logged separately;
+    only category-level text is persisted to job.error / returned to the user, so
+    internal hosts, connection strings and tracebacks are never disclosed."""
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError, httpx.TimeoutException)):
+        return "Timed out while contacting the server."
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code in (401, 403):
+            return "Authentication with the server failed (check your token/credentials)."
+        return "The server returned an error response."
+    if isinstance(exc, httpx.HTTPError):
+        return "Could not reach the server."
+    if isinstance(exc, ValueError):
+        # ValueError is used for intentional, non-sensitive config/validation messages
+        # (missing token, unsupported connector, unsafe base_url).
+        return str(exc)
+    return "An internal error occurred during import."
 
 
 def get_connector(source: str, base_url: str | None):
@@ -63,15 +85,15 @@ def enqueue_import_job(job_id: str) -> bool:
         return False
 
 
-def run_import_job_sync(job_id: str) -> dict[str, Any]:
+def run_import_job_sync(job_id: str, timeout: float | None = None) -> dict[str, Any]:
     db = SessionLocal()
     try:
-        return asyncio.run(_run_job(db, job_id))
+        return asyncio.run(_run_job(db, job_id, timeout=timeout))
     finally:
         db.close()
 
 
-async def _run_job(db: Session, job_id: str) -> dict[str, Any]:
+async def _run_job(db: Session, job_id: str, timeout: float | None = None) -> dict[str, Any]:
     job = db.get(ImportJob, job_id)
     if not job:
         return {"error": "job not found"}
@@ -88,19 +110,34 @@ async def _run_job(db: Session, job_id: str) -> dict[str, Any]:
     db.commit()
 
     try:
+        # Re-validate the target immediately before any outbound request: the base_url
+        # (or the DNS it points to) may have changed since the source was registered.
+        if src.base_url:
+            validate_public_url(src.base_url)
         credentials: dict[str, Any] = {}
         if src.credentials_encrypted:
             credentials = json.loads(decrypt_credentials(src.credentials_encrypted))
         connector = get_connector(src.source, src.base_url)
-        session = await connector.authenticate(credentials)
-        libraries = await connector.list_libraries(session)
-        items, cursor = await connector.sync_items(session, libraries=libraries, cursor=job.cursor or {})
+
+        async def _fetch() -> tuple[list, dict, list]:
+            session = await connector.authenticate(credentials)
+            libraries = await connector.list_libraries(session)
+            fetched_items, fetched_cursor = await connector.sync_items(
+                session, libraries=libraries, cursor=job.cursor or {}
+            )
+            fetched_consumption = await connector.sync_consumption(session, cursor=job.cursor or {})
+            return fetched_items, fetched_cursor, fetched_consumption
+
+        if timeout is not None:
+            items, cursor, consumption = await asyncio.wait_for(_fetch(), timeout=timeout)
+        else:
+            items, cursor, consumption = await _fetch()
+
         upserted = 0
         for norm in items:
             upsert_item(db, src.source, norm)
             upserted += 1
 
-        consumption = await connector.sync_consumption(session, cursor=job.cursor or {})
         written = 0
         for c in consumption:
             ref = (
@@ -140,11 +177,12 @@ async def _run_job(db: Session, job_id: str) -> dict[str, Any]:
         db.commit()
         return job.stats
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Import job failed")
+        logger.exception("Import job %s failed", job_id)
+        safe = _safe_error(exc)
         job.status = ImportJobStatus.failed
-        job.error = str(exc)
+        job.error = safe
         job.finished_at = datetime.now(timezone.utc)
         src.last_status = "failed"
         db.add(src)
         db.commit()
-        return {"error": str(exc)}
+        return {"error": safe}

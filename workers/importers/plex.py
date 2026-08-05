@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 from urllib.parse import quote
-from xml.etree import ElementTree
+from xml.etree import ElementTree  # Element type only; parsing uses defusedxml below
 
 import httpx
+from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from workers.importers.base import (
     ConnectorSession,
@@ -53,7 +54,7 @@ class PlexConnector:
                 headers=self._headers(str(token)),
             )
             response.raise_for_status()
-            root = ElementTree.fromstring(response.content)
+            root = safe_fromstring(response.content)
             self.machine_id = root.get("machineIdentifier")
             return ConnectorSession(
                 token=str(token),
@@ -67,7 +68,7 @@ class PlexConnector:
                 headers=self._headers(session.token),
             )
             response.raise_for_status()
-            root = ElementTree.fromstring(response.content)
+            root = safe_fromstring(response.content)
 
         libraries: list[Library] = []
         for directory in root.findall("Directory"):
@@ -104,7 +105,7 @@ class PlexConnector:
                     params={"includeGuids": "1"},
                 )
                 response.raise_for_status()
-                root = ElementTree.fromstring(response.content)
+                root = safe_fromstring(response.content)
                 for element in root:
                     normalized = self._normalize_element(element, library.media_hint)
                     if normalized is None:

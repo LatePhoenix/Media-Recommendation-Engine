@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.config import get_settings
 from app.db import get_db
 from app.models import ImportJob, ImportJobStatus, ImportSource, User
+from app.net_security import UnsafeUrlError, validate_public_url
 from app.schemas import CsvImportPayload, ImportJobOut, ImportSourceCreate, ImportSourceOut
 from app.security_crypto import encrypt_credentials
 from workers.importers.runner import enqueue_import_job, run_import_job_sync
@@ -31,6 +33,11 @@ def create_source(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ImportSource:
+    if payload.base_url:
+        try:
+            validate_public_url(payload.base_url)
+        except UnsafeUrlError as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid base_url: {exc}") from exc
     encrypted = None
     if payload.credentials:
         encrypted = encrypt_credentials(json.dumps(payload.credentials))
@@ -61,10 +68,20 @@ def trigger_sync(
     db.add(job)
     db.commit()
     db.refresh(job)
-    # Prefer RQ; fall back to sync for local-dev without worker
+
+    # Prefer the RQ worker so the request never blocks on a long external sync.
     queued = enqueue_import_job(str(job.id))
     if not queued:
-        run_import_job_sync(str(job.id))
+        settings = get_settings()
+        if not settings.allow_inline_import_sync:
+            job.status = ImportJobStatus.failed
+            job.error = "Import queue unavailable; try again later."
+            db.commit()
+            db.refresh(job)
+            raise HTTPException(status_code=503, detail="Import queue unavailable; try again later.")
+        # Local-dev fallback only: run inline but bounded by a hard timeout so a slow or
+        # hung server cannot tie up the request worker indefinitely.
+        run_import_job_sync(str(job.id), timeout=settings.inline_import_timeout_seconds)
         db.refresh(job)
     return job
 

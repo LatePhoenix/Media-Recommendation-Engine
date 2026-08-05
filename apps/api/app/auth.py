@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -37,9 +37,21 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload: dict[str, Any] = {"sub": subject, "exp": expire}
+def create_access_token(
+    subject: str,
+    extra: dict[str, Any] | None = None,
+    token_version: int = 0,
+) -> str:
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.access_token_expire_minutes)
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "exp": expire,
+        "iat": now,
+        "jti": uuid4().hex,
+        "typ": "access",
+        "tv": token_version,
+    }
     if extra:
         payload.update(extra)
     return jwt.encode(payload, settings.api_secret_key, algorithm=ALGORITHM)
@@ -61,12 +73,16 @@ def get_current_user(
     try:
         payload = jwt.decode(token, settings.api_secret_key, algorithms=[ALGORITHM])
         sub = payload.get("sub")
-        if sub is None:
+        if sub is None or payload.get("typ") != "access":
             raise credentials_exception
         user_id = UUID(str(sub))
+        token_version = int(payload.get("tv", 0))
     except (JWTError, ValueError) as exc:
         raise credentials_exception from exc
     user = db.get(User, user_id)
     if user is None:
+        raise credentials_exception
+    # Reject tokens issued before the user's current version (revocation / logout-all).
+    if token_version != user.token_version:
         raise credentials_exception
     return user

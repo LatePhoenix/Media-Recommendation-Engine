@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.models import Item, ItemExternalRef, MediaType
 
+# Cap so repeated re-syncs of the same item can't let popularity grow without bound
+# and dominate ranking over time.
+POPULARITY_CEILING = 1000.0
+
 
 def parse_year(value: Any) -> int | None:
     if value is None:
@@ -77,6 +81,6 @@ def upsert_item(
         item.cover_url = norm.cover_url
     if norm.series:
         item.series = norm.series
-    item.popularity = float(item.popularity or 0.0) + 0.1
+    item.popularity = min(float(item.popularity or 0.0) + 0.1, POPULARITY_CEILING)
     db.add(item)
     return item
