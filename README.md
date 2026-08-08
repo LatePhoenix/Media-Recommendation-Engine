@@ -12,7 +12,7 @@ Local-first hybrid media recommender: deterministic retrieval + ranking first, o
 | Jobs | Redis + RQ |
 | Enrichment | Ollama behind `EnrichmentPort` (optional) |
 
-Media types: movies, TV, books, audiobooks, comics, games (games schema-ready; connectors deferred).
+Media types: movies, TV, books, audiobooks, comics, games — each an operationally-separate vertical (default-enabled: movies, TV, audiobooks, games; books and comics are opt-in per user). See the [roadmap](docs/architecture/roadmap.md) for phase status (domain separation, interest layer, external links, metadata quality, collaborative filtering, and UI are implemented).
 
 ## Quick start
 
@@ -34,22 +34,56 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --
 - Postgres: localhost:5432
 - Redis: localhost:6379
 
-### Local API (without Docker for the app)
+### Local dev without Docker for the app
+
+> **Use Python 3.12.** The API image is `python:3.12-slim` and the pinned deps have
+> no wheels for 3.14+ (`psycopg[binary]`, `pydantic-core`, …), so a 3.14 venv fails
+> to install. Postgres 16 + pgvector and Redis still run as containers (used purely
+> as a database appliance).
+
+Native runs need `API_SECRET_KEY` and `CREDENTIALS_FERNET_KEY` in the environment
+(pydantic reads `.env` relative to cwd, so exporting them is the reliable path).
+`DATABASE_URL`/`REDIS_URL` default to `localhost:5432` / `localhost:6379`, matching
+the containers. Generate secrets with:
+`python -c "import secrets,base64,os; print('API_SECRET_KEY='+secrets.token_urlsafe(48)); print('CREDENTIALS_FERNET_KEY='+base64.urlsafe_b64encode(os.urandom(32)).decode())"`
+
+**Linux / macOS:**
 
 ```bash
-# Start postgres + redis via compose
-docker compose -f infra/docker-compose.yml up -d postgres redis
-
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-source .venv/bin/activate
-pip install -r apps/api/requirements.txt
+docker compose -f infra/docker-compose.yml up -d postgres redis   # DB services only
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r apps/api/requirements.txt pytest
+export API_SECRET_KEY=... CREDENTIALS_FERNET_KEY=... PYTHONPATH="$PWD/apps/api:$PWD:$PWD/packages"
 cd apps/api && alembic upgrade head && python -m app.seed
-uvicorn app.main:app --reload --app-dir .
+uvicorn app.main:app --reload            # API on :8000
 ```
 
+**Windows / PowerShell** (call `python.exe` directly — the execution policy blocks
+`Activate.ps1`):
+
+```powershell
+docker compose -f infra/docker-compose.yml up -d postgres redis
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r apps\api\requirements.txt pytest
+$env:API_SECRET_KEY="..."; $env:CREDENTIALS_FERNET_KEY="..."
+$env:PYTHONPATH="$PWD\apps\api;$PWD;$PWD\packages"
+Set-Location apps\api
+..\..\.venv\Scripts\python.exe -m alembic upgrade head
+..\..\.venv\Scripts\python.exe -m app.seed
+..\..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000 --reload
+```
+
+Web (either OS):
+
 ```bash
-cd apps/web && npm install && npm run dev
+cd apps/web && npm install && npm run dev   # http://localhost:5173
+```
+
+Tests are DB-free (no Postgres/Redis needed); `apps/api/conftest.py` sets the test
+secrets and import paths, so from `apps/api`:
+
+```bash
+python -m pytest app/tests -q
 ```
 
 ## Monorepo layout
