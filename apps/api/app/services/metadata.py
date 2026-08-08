@@ -96,6 +96,9 @@ class MetadataNormalizationService:
             return existing
         link = SeriesItem(series_id=s.id, item_id=item.id, sequence=sequence)
         self.db.add(link)
+        # Flush so a repeat call in the same (autoflush=False) session sees this row
+        # via db.get and updates it, rather than inserting a duplicate PK.
+        self.db.flush()
         return link
 
     # --- tags ---

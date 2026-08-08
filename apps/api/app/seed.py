@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.db import SessionLocal
 from app.models import Item, MediaType, ModelConfig
 from app.recommender.engine import DEFAULT_WEIGHTS
+from app.services.metadata import MetadataNormalizationService
 
 ANCHORS: list[dict] = [
     # Movies
@@ -101,6 +102,41 @@ ANCHORS: list[dict] = [
 ]
 
 
+# Series/franchise assignment for seed titles (title -> series, franchise, sequence).
+# Only real groupings from the catalog above — the multi-entry one (Stormlight) shows
+# ordered franchise pages; the rest are single-entry series.
+SERIES_ASSIGN: dict[str, tuple[str, str | None, float | None]] = {
+    "The Way of Kings": ("The Stormlight Archive", "Cosmere", 1),
+    "Words of Radiance": ("The Stormlight Archive", "Cosmere", 2),
+    "Mistborn: The Final Empire": ("Mistborn", "Cosmere", 1),
+    "Dune": ("Dune", "Dune", 1),
+    "Blade Runner 2049": ("Blade Runner", "Blade Runner", 2),
+}
+
+
+def normalize_catalog(db) -> None:
+    """Populate canonical creators/series/tags/aliases from existing items.
+
+    Idempotent — safe to re-run. Runs on every ``python -m app.seed`` so both a fresh
+    install and an already-seeded DB get the Phase 4 metadata (imports normalize on
+    ingest; seed items are inserted directly, so they need this pass)."""
+    meta = MetadataNormalizationService(db)
+    items = db.query(Item).all()
+    for item in items:
+        assign = SERIES_ASSIGN.get(item.title)
+        if assign:
+            series_name, franchise, _seq = assign
+            if item.series != series_name or item.franchise != franchise:
+                item.series = series_name
+                item.franchise = franchise
+                db.add(item)
+        meta.normalize_item(item)
+        if assign:
+            meta.link_series(item, assign[0], franchise=assign[1], sequence=assign[2])
+    db.commit()
+    print(f"Normalized {len(items)} items into canonical creators/series/tags/aliases")
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
@@ -147,6 +183,8 @@ def seed() -> None:
                 db.add(ModelConfig(media_type=mt, name="default", weights=weights, active=True))
         db.commit()
         print("Model configs ensured")
+
+        normalize_catalog(db)
     finally:
         db.close()
 
