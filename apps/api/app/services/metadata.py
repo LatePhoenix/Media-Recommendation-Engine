@@ -30,6 +30,7 @@ from app.models import (
     Series,
     SeriesItem,
     SimilarityEdge,
+    UserInteraction,
     UserItemState,
     UserItemStateHistory,
 )
@@ -146,6 +147,7 @@ class MetadataNormalizationService:
 
     def normalize_item(self, item: Item, source: str | None = None) -> None:
         """Populate canonical tables from an item's denormalized fields. Idempotent."""
+        item.normalized_title = normalize_title(item.title) or None
         self.add_alias(item, item.title, source=source)
         if item.sort_title and normalize_title(item.sort_title) != normalize_title(item.title):
             self.add_alias(item, item.sort_title, source=source)
@@ -182,14 +184,26 @@ class MetadataNormalizationService:
             if year is None or item.release_year is None or item.release_year == year:
                 return item
 
-        title_q = select(Item).where(Item.media_type == media_type)
+        title_q = select(Item).where(
+            Item.media_type == media_type,
+            Item.normalized_title == norm,
+        )
         if year is not None:
             title_q = title_q.where(Item.release_year == year)
         if exclude_id is not None:
             title_q = title_q.where(Item.id != exclude_id)
-        for item in self.db.execute(title_q).scalars().all():
-            if normalize_title(item.title) == norm:
-                return item
+        item = self.db.execute(title_q.limit(1)).scalars().first()
+        if item is not None:
+            return item
+        # Fallback for rows not yet backfilled with normalized_title.
+        title_q = select(Item).where(Item.media_type == media_type, Item.normalized_title.is_(None))
+        if year is not None:
+            title_q = title_q.where(Item.release_year == year)
+        if exclude_id is not None:
+            title_q = title_q.where(Item.id != exclude_id)
+        for candidate in self.db.execute(title_q).scalars().all():
+            if normalize_title(candidate.title) == norm:
+                return candidate
         return None
 
     def merge_items(self, primary: Item, duplicate: Item) -> Item:
@@ -210,10 +224,15 @@ class MetadataNormalizationService:
         self.db.execute(delete(EmbeddingVector).where(EmbeddingVector.entity_id == duplicate.id))
 
         # No per-item unique constraint -> plain repoint.
-        for model in (ItemExternalRef, RecommendationEvent, UserItemStateHistory):
+        for model in (RecommendationEvent, UserItemStateHistory, UserInteraction):
             self.db.execute(
                 update(model).where(model.item_id == duplicate.id).values(item_id=primary.id)
             )
+
+        # ItemExternalRef: unique on (source, external_id) — conflict-aware.
+        self._move_conflict_aware(
+            ItemExternalRef, [ItemExternalRef.source, ItemExternalRef.external_id], primary.id, duplicate.id
+        )
 
         # Composite-unique children -> move only non-colliding rows.
         self._move_conflict_aware(UserItemState, [UserItemState.user_id], primary.id, duplicate.id)

@@ -57,6 +57,31 @@ class SsrfGuardTests(unittest.TestCase):
         for url in ("https://api.trakt.tv", "http://example.com", "https://plex.tv:443/x"):
             validate_public_url(url)  # must not raise
 
+    def test_import_url_allows_lan_when_private_enabled(self) -> None:
+        from app.net_security import UnsafeUrlError, validate_import_url
+
+        for url in (
+            "http://192.168.1.10:8096",
+            "http://127.0.0.1:32400",
+            "http://10.0.0.5",
+        ):
+            resolved = validate_import_url(url, allow_private=True)
+            self.assertTrue(resolved.pinned_ip)
+
+        for url in (
+            "http://169.254.169.254/latest/meta-data/",
+            "file:///etc/passwd",
+            "ftp://example.com",
+        ):
+            with self.assertRaises(UnsafeUrlError, msg=url):
+                validate_import_url(url, allow_private=True)
+
+    def test_import_url_strict_when_private_disabled(self) -> None:
+        from app.net_security import UnsafeUrlError, validate_import_url
+
+        with self.assertRaises(UnsafeUrlError):
+            validate_import_url("http://192.168.1.10:8096", allow_private=False)
+
 
 class ErrorSanitizationTests(unittest.TestCase):
     def test_internal_details_are_not_leaked(self) -> None:
@@ -94,6 +119,53 @@ class RateLimitTests(unittest.TestCase):
         self.assertTrue(blocked)
         # A different key is tracked independently.
         rl.enforce_rate_limit("rl:test:ip:9.9.9.9", times=5, window_seconds=60)
+
+    def test_fail_closed_on_backend_error(self) -> None:
+        from fastapi import HTTPException
+
+        import app.rate_limit as rl
+        from app.config import get_settings
+
+        class _Boom:
+            def hit(self, key: str, window: int):
+                raise RuntimeError("redis down")
+
+        rl._backend = _Boom()
+        get_settings.cache_clear()
+        os.environ["RATE_LIMIT_FAIL_OPEN"] = "false"
+        get_settings.cache_clear()
+        with self.assertRaises(HTTPException) as ctx:
+            rl.enforce_rate_limit("rl:test:fail", times=5, window_seconds=60)
+        self.assertEqual(ctx.exception.status_code, 503)
+        os.environ["RATE_LIMIT_FAIL_OPEN"] = "true"
+        get_settings.cache_clear()
+        rl.enforce_rate_limit("rl:test:fail-open", times=5, window_seconds=60)
+        os.environ.pop("RATE_LIMIT_FAIL_OPEN", None)
+        get_settings.cache_clear()
+        rl.reset_backend_for_tests()
+
+
+class AdminAuthzTests(unittest.TestCase):
+    def test_require_admin_rejects_non_admin(self) -> None:
+        from fastapi import HTTPException
+
+        from app.auth import require_admin
+
+        class _User:
+            is_admin = False
+
+        with self.assertRaises(HTTPException) as ctx:
+            require_admin(user=_User())  # type: ignore[arg-type]
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_require_admin_accepts_admin(self) -> None:
+        from app.auth import require_admin
+
+        class _User:
+            is_admin = True
+
+        user = _User()
+        self.assertIs(require_admin(user=user), user)  # type: ignore[arg-type]
 
 
 class JwtTests(unittest.TestCase):

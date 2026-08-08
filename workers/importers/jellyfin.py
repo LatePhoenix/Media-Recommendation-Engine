@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
 from workers.importers.base import (
     ConnectorSession,
     Library,
@@ -11,6 +9,7 @@ from workers.importers.base import (
     NormalizedItem,
 )
 from workers.importers.catalog_utils import parse_year
+from workers.importers.secure_http import pinned_async_client
 
 
 class JellyfinConnector:
@@ -27,7 +26,7 @@ class JellyfinConnector:
         password = credentials.get("password")
         if not username or password is None:
             raise ValueError("Jellyfin requires api_key or username/password")
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with pinned_async_client(self.base_url, timeout=30.0) as client:
             resp = await client.post(
                 f"{self.base_url}/Users/AuthenticateByName",
                 json={"Username": username, "Pw": password},
@@ -49,7 +48,7 @@ class JellyfinConnector:
         return {"Authorization": auth, "X-Emby-Authorization": auth}
 
     async def list_libraries(self, session: ConnectorSession) -> list[Library]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with pinned_async_client(self.base_url, timeout=30.0) as client:
             resp = await client.get(
                 f"{self.base_url}/Library/VirtualFolders",
                 headers=self._headers(session.token),
@@ -94,7 +93,7 @@ class JellyfinConnector:
             "StartIndex": start,
             "Limit": page,
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with pinned_async_client(self.base_url, timeout=60.0) as client:
             resp = await client.get(
                 f"{self.base_url}/Items",
                 headers=self._headers(session.token),
@@ -142,7 +141,7 @@ class JellyfinConnector:
         user_id = session.meta.get("user_id")
         if not user_id:
             return []
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with pinned_async_client(self.base_url, timeout=60.0) as client:
             resp = await client.get(
                 f"{self.base_url}/Users/{user_id}/Items",
                 headers=self._headers(session.token),

@@ -94,6 +94,8 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     # Bumped to revoke all outstanding JWTs for this user (logout-all / password reset).
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # First registered user is admin; gates /api/admin and manual link overrides.
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Books and comics are opt-in; they surface only after a user enables them.
     enabled_media_types: Mapped[list] = mapped_column(
         JSONB, default=lambda: ["movie", "tv", "audiobook", "game"]
@@ -116,6 +118,8 @@ class Item(Base):
     media_type: Mapped[MediaType] = mapped_column(Enum(MediaType, name="media_type"), index=True)
     title: Mapped[str] = mapped_column(String(512), index=True)
     sort_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Precomputed for dedup queries (see MetadataNormalizationService.find_duplicate).
+    normalized_title: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
     series: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
     franchise: Mapped[str | None] = mapped_column(String(512), nullable=True)
     genres: Mapped[list] = mapped_column(JSONB, default=list)

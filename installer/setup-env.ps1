@@ -55,6 +55,32 @@ if ($content -match "(?m)^CREDENTIALS_FERNET_KEY=\s*$") {
   $changed = $true
 }
 
+# Rotate default weak DB/Redis passwords when still at example defaults.
+if ($content -match "(?m)^POSTGRES_PASSWORD=mediarec\s*$") {
+  $pgPass = New-UrlSafeToken 24
+  $content = $content -replace "(?m)^POSTGRES_PASSWORD=mediarec\s*$", "POSTGRES_PASSWORD=$pgPass"
+  $content = $content -replace "(?m)^DATABASE_URL=postgresql\+psycopg://mediarec:mediarec@", "DATABASE_URL=postgresql+psycopg://mediarec:${pgPass}@"
+  Write-Host "Generated POSTGRES_PASSWORD."
+  $changed = $true
+}
+
+if ($content -notmatch "(?m)^REDIS_PASSWORD=") {
+  $redisPass = New-UrlSafeToken 24
+  if ($content -match "(?m)^REDIS_URL=") {
+    $content = $content -replace "(?m)^REDIS_URL=.*$", "REDIS_PASSWORD=$redisPass`nREDIS_URL=redis://:${redisPass}@localhost:6379/0"
+  } else {
+    $content = $content.TrimEnd() + "`nREDIS_PASSWORD=$redisPass`nREDIS_URL=redis://:${redisPass}@localhost:6379/0`n"
+  }
+  Write-Host "Generated REDIS_PASSWORD."
+  $changed = $true
+} elseif ($content -match "(?m)^REDIS_PASSWORD=mediarec-redis\s*$") {
+  $redisPass = New-UrlSafeToken 24
+  $content = $content -replace "(?m)^REDIS_PASSWORD=mediarec-redis\s*$", "REDIS_PASSWORD=$redisPass"
+  $content = $content -replace "(?m)^REDIS_URL=.*$", "REDIS_URL=redis://:${redisPass}@localhost:6379/0"
+  Write-Host "Rotated REDIS_PASSWORD."
+  $changed = $true
+}
+
 if ($changed) {
   Set-Content -Path $EnvFile -Value $content -NoNewline -Encoding UTF8
 }

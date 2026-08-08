@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mediarec}
       POSTGRES_DB: ${POSTGRES_DB:-mediarec}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -18,10 +18,11 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-mediarec-redis}"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-mediarec-redis}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -33,12 +34,13 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
-      REDIS_URL: redis://redis:6379/0
-      API_CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://web:5173
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-mediarec}:${POSTGRES_PASSWORD:-mediarec}@postgres:5432/${POSTGRES_DB:-mediarec}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-mediarec-redis}@redis:6379/0
+      API_CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://web:80
       PYTHONPATH: /:/packages:/app
+      SEED_FAIL_SOFT: ${SEED_FAIL_SOFT:-false}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,13 +52,13 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.api
     # Skip image ENTRYPOINT (migrate/seed) — only the API should migrate.
-    entrypoint: ["rq", "worker", "imports", "--url", "redis://redis:6379/0"]
+    entrypoint: ["rq", "worker", "imports", "--url", "redis://:${REDIS_PASSWORD:-mediarec-redis}@redis:6379/0"]
     working_dir: /app
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-mediarec}:${POSTGRES_PASSWORD:-mediarec}@postgres:5432/${POSTGRES_DB:-mediarec}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-mediarec-redis}@redis:6379/0
       PYTHONPATH: /:/packages:/app
     depends_on:
       postgres:
@@ -68,13 +70,13 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile.api
-    entrypoint: ["rq", "worker", "recommender", "--url", "redis://redis:6379/0"]
+    entrypoint: ["rq", "worker", "recommender", "--url", "redis://:${REDIS_PASSWORD:-mediarec-redis}@redis:6379/0"]
     working_dir: /app
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+psycopg://mediarec:mediarec@postgres:5432/mediarec
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-mediarec}:${POSTGRES_PASSWORD:-mediarec}@postgres:5432/${POSTGRES_DB:-mediarec}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-mediarec-redis}@redis:6379/0
       PYTHONPATH: /:/packages:/app
       ENRICHMENT_ENABLED: "false"
     depends_on:
@@ -83,14 +85,31 @@ services:
       redis:
         condition: service_healthy
 
+  recommender-scheduler:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    entrypoint: ["/bin/sh", "/entrypoint-recommender-scheduler.sh"]
+    env_file:
+      - ../.env
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-mediarec-redis}@redis:6379/0
+      CF_REBUILD_INTERVAL_SECONDS: ${CF_REBUILD_INTERVAL_SECONDS:-86400}
+      PYTHONPATH: /:/packages:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      recommender-worker:
+        condition: service_started
+
   web:
     build:
       context: ..
       dockerfile: infra/Dockerfile.web
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:80"
     depends_on:
       - api
 
@@ -98,7 +117,7 @@ services:
   # ollama:
   #   image: ollama/ollama:latest
   #   ports:
-  #     - "11434:11434"
+  #     - "127.0.0.1:11434:11434"
   #   volumes:
   #     - ollama_data:/root/.ollama
 

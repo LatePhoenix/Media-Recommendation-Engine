@@ -18,21 +18,33 @@ Media types: movies, TV, books, audiobooks, comics, games — each an operationa
 
 ```bash
 cp .env.example .env
+# Set API_SECRET_KEY (and prefer rotating POSTGRES_PASSWORD / REDIS_PASSWORD).
 docker compose -f infra/docker-compose.yml up --build
+# Or: make up
 ```
 
 For live-reload bind mounts while developing inside Docker:
 
 ```bash
 docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build
+# Or: make dev
 ```
 
 (The Windows installer uses the base compose file only — no bind mounts — so Program Files ACLs cannot block the web container.)
 
-- Web: http://localhost:5173
+- Web: http://localhost:5173 (nginx static in prod compose; Vite HMR in `.dev.yml`)
 - API docs: http://localhost:8000/docs
-- Postgres: localhost:5432
-- Redis: localhost:6379
+- Liveness: http://localhost:8000/health
+- Readiness: http://localhost:8000/health/ready
+- Postgres / Redis: bound to `127.0.0.1` only (not LAN-exposed)
+
+**Auth model (local-first single-household):** the first registered user is admin.
+Set `REGISTRATION_ENABLED=false` after setup to lock signup. Admin routes and
+manual external-link overrides require `is_admin`. The catalog is shared within
+the household.
+
+**Import URLs:** `ALLOW_PRIVATE_IMPORT_URLS=true` (default) allows LAN/loopback
+Plex/Jellyfin base URLs; cloud metadata / link-local remain blocked.
 
 ### Local dev without Docker for the app
 
@@ -113,10 +125,11 @@ In **Imports → Add source**, select Plex and enter:
 - A Plex access token authorized for that server
 
 With Docker Desktop and Plex on the same Windows host, use
-`http://host.docker.internal:32400`.
+`http://host.docker.internal:32400` (allowed when `ALLOW_PRIVATE_IMPORT_URLS=true`).
 
 Sync imports movie/TV sections and account-specific watched/progress state. The
-token is encrypted at rest and is not embedded in stored artwork URLs.
+token is encrypted at rest and is not embedded in stored artwork URLs — the UI
+loads covers through an authenticated `/api/imports/sources/{id}/artwork` proxy.
 
 ## Docs
 

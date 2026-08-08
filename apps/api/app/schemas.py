@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -43,6 +43,7 @@ class UserOut(BaseModel):
     enabled_media_types: list[str]
     preferences: dict[str, Any]
     onboarding_complete: bool
+    is_admin: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -305,7 +306,7 @@ class AdminModelConfigIn(BaseModel):
 
 
 class ImportSourceCreate(BaseModel):
-    source: str
+    source: Literal["jellyfin", "plex", "audiobookshelf", "komga", "trakt"]
     display_name: str
     base_url: str | None = None
     credentials: dict[str, Any] = Field(default_factory=dict)

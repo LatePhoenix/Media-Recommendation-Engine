@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
 from workers.importers.base import (
     ConnectorSession,
     Library,
@@ -11,6 +9,7 @@ from workers.importers.base import (
     NormalizedItem,
 )
 from workers.importers.catalog_utils import parse_year
+from workers.importers.secure_http import pinned_async_client
 
 
 class AudiobookshelfConnector:
@@ -29,7 +28,7 @@ class AudiobookshelfConnector:
         password = credentials.get("password")
         if not username or password is None:
             raise ValueError("Audiobookshelf requires api_key/token or username/password")
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with pinned_async_client(self.base_url, timeout=30.0) as client:
             resp = await client.post(
                 f"{self.base_url}/login",
                 json={"username": username, "password": password},
@@ -46,7 +45,7 @@ class AudiobookshelfConnector:
         return h
 
     async def list_libraries(self, session: ConnectorSession) -> list[Library]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with pinned_async_client(self.base_url, timeout=30.0) as client:
             resp = await client.get(f"{self.base_url}/api/libraries", headers=self._headers(session.token))
             resp.raise_for_status()
             data = resp.json()
@@ -65,7 +64,7 @@ class AudiobookshelfConnector:
     ) -> tuple[list[NormalizedItem], dict[str, Any]]:
         libs = libraries or await self.list_libraries(session)
         items: list[NormalizedItem] = []
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with pinned_async_client(self.base_url, timeout=60.0) as client:
             for lib in libs:
                 resp = await client.get(
                     f"{self.base_url}/api/libraries/{lib.id}/items",
@@ -115,7 +114,7 @@ class AudiobookshelfConnector:
         cursor: dict[str, Any] | None = None,
     ) -> list[NormalizedConsumption]:
         # ABS progress often lives on media progress endpoints; best-effort
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with pinned_async_client(self.base_url, timeout=30.0) as client:
             resp = await client.get(
                 f"{self.base_url}/api/me/progress",
                 headers=self._headers(session.token),

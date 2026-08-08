@@ -1,5 +1,9 @@
 #!/bin/sh
 set -e
 alembic upgrade head
-python -m app.seed || true
+if [ "${SEED_FAIL_SOFT:-false}" = "true" ]; then
+  python -m app.seed || true
+else
+  python -m app.seed
+fi
 exec "$@"

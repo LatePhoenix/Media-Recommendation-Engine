@@ -74,5 +74,43 @@ def health() -> dict:
     return {
         "status": "ok",
         "enrichment_enabled": settings.enrichment_enabled,
-        "version": "0.1.0",
+        "version": app.version,
     }
+
+
+@app.get("/health/ready")
+def ready() -> dict:
+    """Readiness: Postgres + Redis must respond."""
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+
+    from app.db import SessionLocal
+    from app.models import SimilarityEdge
+
+    checks: dict[str, str] = {}
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+            edge_count = db.query(SimilarityEdge).count()
+            checks["database"] = "ok"
+            checks["similarity_edges"] = str(edge_count)
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        checks["database"] = "error"
+
+    try:
+        from redis import Redis
+
+        conn = Redis.from_url(settings.redis_url, socket_connect_timeout=0.5, socket_timeout=0.5)
+        conn.ping()
+        checks["redis"] = "ok"
+    except Exception:  # noqa: BLE001
+        checks["redis"] = "error"
+
+    ok = checks.get("database") == "ok" and checks.get("redis") == "ok"
+    body = {"status": "ready" if ok else "degraded", "checks": checks, "version": app.version}
+    if not ok:
+        return JSONResponse(status_code=503, content=body)
+    return body

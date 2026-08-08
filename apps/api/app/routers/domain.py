@@ -13,7 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.db import get_db
 from app.domains import enabled_domain
 from app.models import ItemState, MediaType, User
@@ -213,6 +213,7 @@ def set_manual_link(
     provider: str,
     payload: ManualLinkIn,
     media_type: MediaType = Depends(enabled_domain),
+    _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> ExternalLinkOut:
     """Manual override (admin). Manual links are authoritative and never auto-overwritten."""

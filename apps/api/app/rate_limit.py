@@ -96,9 +96,15 @@ def enforce_rate_limit(key: str, times: int, window_seconds: int) -> None:
     """Raise HTTP 429 if `key` has been hit more than `times` within the window."""
     try:
         count, ttl = _get_backend().hit(key, window_seconds)
-    except Exception as exc:  # noqa: BLE001 — never let limiter internals break auth
-        logger.warning("Rate limiter error (%s); allowing request", exc)
-        return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Rate limiter error (%s)", exc)
+        if get_settings().rate_limit_fail_open:
+            logger.warning("Rate limiter fail-open; allowing request")
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Rate limiter unavailable. Please try again shortly.",
+        ) from exc
     if count > times:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

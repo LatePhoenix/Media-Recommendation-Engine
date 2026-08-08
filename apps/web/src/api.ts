@@ -143,6 +143,7 @@ export interface User {
   enabled_media_types: string[];
   preferences: Record<string, unknown>;
   onboarding_complete: boolean;
+  is_admin?: boolean;
 }
 
 export interface Item {
