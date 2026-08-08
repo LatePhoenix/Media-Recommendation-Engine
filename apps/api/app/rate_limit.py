@@ -1,10 +1,13 @@
-from __future__ import annotations
-
 import logging
 import threading
 import time
 
 from fastapi import HTTPException, Request, status
+
+# NOTE: no `from __future__ import annotations` here. This module's IPRateLimiter is
+# used as a class-instance FastAPI dependency; with stringized annotations FastAPI
+# cannot resolve the `Request` type on `__call__` (an instance has no __globals__),
+# and mis-detects `request` as a query parameter → 422 on every rate-limited route.
 
 from app.config import get_settings
 

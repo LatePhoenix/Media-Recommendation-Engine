@@ -87,6 +87,17 @@ ANCHORS: list[dict] = [
     {"media_type": MediaType.audiobook, "title": "Words of Radiance", "year": 2014, "genres": ["Fantasy"], "creators": ["Brandon Sanderson"], "pop": 91, "anchor": False},
     {"media_type": MediaType.comic, "title": "Paper Girls", "year": 2015, "genres": ["Sci-Fi", "Mystery"], "creators": ["Brian K. Vaughan"], "pop": 83, "anchor": False},
     {"media_type": MediaType.comic, "title": "Y: The Last Man", "year": 2002, "genres": ["Sci-Fi", "Drama"], "creators": ["Brian K. Vaughan"], "pop": 87, "anchor": False},
+    # Games (enabled by default) — platform lives in extensions for browse filters.
+    {"media_type": MediaType.game, "title": "The Witcher 3: Wild Hunt", "year": 2015, "genres": ["RPG", "Adventure"], "creators": ["CD Projekt Red"], "pop": 96, "ext": {"platform": "PC"}},
+    {"media_type": MediaType.game, "title": "Elden Ring", "year": 2022, "genres": ["RPG", "Action"], "creators": ["FromSoftware"], "pop": 97, "ext": {"platform": "PC"}},
+    {"media_type": MediaType.game, "title": "Hades", "year": 2020, "genres": ["Roguelike", "Action"], "creators": ["Supergiant Games"], "pop": 92, "ext": {"platform": "Switch"}},
+    {"media_type": MediaType.game, "title": "Disco Elysium", "year": 2019, "genres": ["RPG", "Mystery"], "creators": ["ZA/UM"], "pop": 90, "ext": {"platform": "PC"}},
+    {"media_type": MediaType.game, "title": "Hollow Knight", "year": 2017, "genres": ["Metroidvania", "Adventure"], "creators": ["Team Cherry"], "pop": 91, "ext": {"platform": "Switch"}},
+    {"media_type": MediaType.game, "title": "Outer Wilds", "year": 2019, "genres": ["Adventure", "Mystery"], "creators": ["Mobius Digital"], "pop": 89, "ext": {"platform": "PC"}},
+    {"media_type": MediaType.game, "title": "Red Dead Redemption 2", "year": 2018, "genres": ["Action", "Adventure", "Western"], "creators": ["Rockstar Games"], "pop": 95, "ext": {"platform": "PS4"}},
+    {"media_type": MediaType.game, "title": "Baldur's Gate 3", "year": 2023, "genres": ["RPG", "Adventure"], "creators": ["Larian Studios"], "pop": 96, "ext": {"platform": "PC"}},
+    {"media_type": MediaType.game, "title": "Celeste", "year": 2018, "genres": ["Platformer", "Adventure"], "creators": ["Maddy Makes Games"], "pop": 87, "anchor": False, "ext": {"platform": "Switch"}},
+    {"media_type": MediaType.game, "title": "Return of the Obra Dinn", "year": 2018, "genres": ["Mystery", "Puzzle"], "creators": ["Lucas Pope"], "pop": 84, "anchor": False, "ext": {"platform": "PC"}},
 ]
 
 
@@ -107,6 +118,7 @@ def seed() -> None:
                         release_year=row["year"],
                         popularity=float(row["pop"]),
                         is_anchor=row.get("anchor", True),
+                        extensions=row.get("ext", {}),
                         description=f"Seed catalog title: {row['title']}",
                     )
                 )

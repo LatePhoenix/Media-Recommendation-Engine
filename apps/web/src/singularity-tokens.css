@@ -1,0 +1,72 @@
+/* Singularity Solutions — product UI tokens (vendored from ui/singularity/tokens.css).
+   Shared design system across Singularity apps (AI-Dungeon-Master, VRC-Audio-Server, …).
+   Toggle [data-theme="light"] on <html> for light mode. */
+
+:root,
+[data-theme="dark"] {
+  --sss-bg: #0f1520;
+  --sss-panel: #152033;
+  --sss-input: #0c121c;
+  --sss-border: #2a3a55;
+  --sss-blueprint: #4a7fbf;
+  --sss-text: #f4f7ff;
+  --sss-body: #e8edf7;
+  --sss-muted: #9aa4b8;
+  --sss-accent-text: #8be9c7;
+  --sss-btn: #1c2738;
+  --sss-btn-border: #3a4a62;
+  --sss-cta: #3ddc84; /* in-app action accent — remint per domain if needed */
+  --sss-icon-cyan: #0ce0ef; /* app-icon / brand glyph glow — NOT the CTA color (see design system §9) */
+  --sss-icon-core: #d8ffff; /* hot core of the neon glyph */
+  --sss-danger: #e05b5b;
+  --sss-warning: #e0a83d;
+  --sss-on-cta: #0b0e14;
+  --sss-grid-line: #ffffff;
+  --sss-grid-opacity: 0.04;
+  --sss-radius-control: 8px;
+  --sss-radius-card: 12px;
+  --sss-space: 4px;
+  --sss-font: "Satoshi", "Inter", "Segoe UI", system-ui, sans-serif;
+  --sss-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+}
+
+[data-theme="light"] {
+  --sss-bg: #f4f7fb;
+  --sss-panel: #ffffff;
+  --sss-input: #f0f4fa;
+  --sss-border: #c5d0e0;
+  --sss-blueprint: #1557c0;
+  --sss-text: #111827;
+  --sss-body: #1f2937;
+  --sss-muted: #5b6472;
+  --sss-accent-text: #0f766e;
+  --sss-btn: #e5eaf2;
+  --sss-btn-border: #c7d0de;
+  --sss-cta: #1db954;
+  --sss-danger: #d64545;
+  --sss-warning: #b45309;
+  --sss-on-cta: #0b0e14;
+  --sss-grid-line: #1557c0;
+  --sss-grid-opacity: 0.06;
+}
+
+/* Signature blueprint grid canvas */
+.sss-canvas {
+  position: relative;
+  min-height: 100%;
+  background: var(--sss-bg);
+  color: var(--sss-body);
+  font-family: var(--sss-font);
+}
+
+.sss-canvas::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: var(--sss-grid-opacity);
+  background-image:
+    linear-gradient(var(--sss-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sss-grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

@@ -23,6 +23,36 @@ export const InteractionTypes = [
 ] as const;
 export type InteractionType = (typeof InteractionTypes)[number];
 
+/** Durable per-user intent states (Phase 2 interest layer). */
+export const ItemStates = [
+  "interested",
+  "shortlisted",
+  "in_progress",
+  "completed",
+  "passed",
+  "hidden",
+] as const;
+export type ItemState = (typeof ItemStates)[number];
+
+export const InterestSources = ["manual", "imported", "inferred"] as const;
+export type InterestSource = (typeof InterestSources)[number];
+
+/** Public-metadata providers for outbound source links (Phase 3). */
+export const LinkProviders = [
+  "imdb",
+  "rottentomatoes",
+  "metacritic",
+  "tmdb",
+  "openlibrary",
+  "googlebooks",
+  "igdb",
+  "comicvine",
+] as const;
+export type LinkProvider = (typeof LinkProviders)[number];
+
+export const ResolutionMethods = ["api", "search", "manual", "imported"] as const;
+export type ResolutionMethod = (typeof ResolutionMethods)[number];
+
 export const RatingLabels = [
   "Loved it",
   "Liked it",

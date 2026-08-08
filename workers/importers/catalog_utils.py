@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import Item, ItemExternalRef, MediaType
+from app.services.metadata import MetadataNormalizationService
 
 # Cap so repeated re-syncs of the same item can't let popularity grow without bound
 # and dominate ranking over time.
@@ -30,6 +31,7 @@ def upsert_item(
     norm: Any,
 ) -> Item:
     """Upsert by external ref, else fuzzy title/year/media_type match."""
+    meta = MetadataNormalizationService(db)
     existing_ref = (
         db.query(ItemExternalRef)
         .filter(ItemExternalRef.source == source, ItemExternalRef.external_id == norm.external_id)
@@ -38,13 +40,11 @@ def upsert_item(
     if existing_ref:
         item = existing_ref.item
     else:
-        q = db.query(Item).filter(
-            Item.media_type == MediaType(norm.media_type),
-            Item.title.ilike(norm.title),
+        # Canonical dedup across sources: match by normalized title/alias before
+        # creating a new item, so the same title from Plex and Trakt collapses.
+        item = meta.find_duplicate(
+            MediaType(norm.media_type), norm.title, norm.release_year
         )
-        if norm.release_year:
-            q = q.filter(Item.release_year == norm.release_year)
-        item = q.first()
         if item is None:
             item = Item(
                 media_type=MediaType(norm.media_type),
@@ -83,4 +83,7 @@ def upsert_item(
         item.series = norm.series
     item.popularity = min(float(item.popularity or 0.0) + 0.1, POPULARITY_CEILING)
     db.add(item)
+    db.flush()
+    # Populate canonical creators/series/tags/aliases from the refreshed fields.
+    meta.normalize_item(item, source=source)
     return item

@@ -22,7 +22,7 @@ for path in (ROOT, ROOT / "packages"):
         sys.path.insert(0, s)
 
 from app.config import get_settings
-from app.routers import auth, catalog, imports, interactions, onboarding, recommendations
+from app.routers import admin, auth, catalog, domain, imports, interactions, onboarding, recommendations
 
 settings = get_settings()
 
@@ -64,6 +64,9 @@ app.include_router(interactions.router)
 app.include_router(onboarding.router)
 app.include_router(recommendations.router)
 app.include_router(imports.router)
+app.include_router(admin.router)
+# Registered last: its /api/{domain} prefix must not shadow the specific routers above.
+app.include_router(domain.router)
 
 
 @app.get("/health")

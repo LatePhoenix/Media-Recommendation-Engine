@@ -63,6 +63,28 @@ class ImportJobStatus(str, enum.Enum):
     failed = "failed"
 
 
+class ItemState(str, enum.Enum):
+    """Durable per-user intent for a catalog item (Phase 2 interest layer).
+
+    ``in_progress`` is the canonical "actively engaging" state; the UI renders it
+    per domain as Watching now / Reading now / Playing now. ``hidden`` hard-excludes
+    an item from every feed; ``passed`` only suppresses it temporarily.
+    """
+
+    interested = "interested"
+    shortlisted = "shortlisted"
+    in_progress = "in_progress"
+    completed = "completed"
+    passed = "passed"
+    hidden = "hidden"
+
+
+class InterestSource(str, enum.Enum):
+    manual = "manual"
+    imported = "imported"
+    inferred = "inferred"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -72,8 +94,9 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     # Bumped to revoke all outstanding JWTs for this user (logout-all / password reset).
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Books and comics are opt-in; they surface only after a user enables them.
     enabled_media_types: Mapped[list] = mapped_column(
-        JSONB, default=lambda: ["movie", "tv", "audiobook", "comic"]
+        JSONB, default=lambda: ["movie", "tv", "audiobook", "game"]
     )
     preferences: Mapped[dict] = mapped_column(JSONB, default=dict)
     onboarding_complete: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -128,6 +151,39 @@ class ItemExternalRef(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     item: Mapped[Item] = relationship(back_populates="external_refs")
+
+
+class ExternalId(Base):
+    """Outbound public-metadata links per item (Phase 3).
+
+    Distinct from :class:`ItemExternalRef` (import-source provenance like Plex/Jellyfin):
+    this maps an item to public destinations (IMDb, Rotten Tomatoes, Metacritic, TMDb,
+    OpenLibrary, IGDB, …). ``confidence`` and ``resolution_method`` let the UI show
+    verified deep links as truth while flagging fuzzy/search links as unresolved.
+    ``provider`` and ``resolution_method`` are open strings, not enums, so new providers
+    don't require a migration.
+    """
+
+    __tablename__ = "external_ids"
+    __table_args__ = (UniqueConstraint("item_id", "provider", name="uq_external_id_item_provider"),)
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    item_id: Mapped[Any] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"))
+    media_type: Mapped[MediaType] = mapped_column(
+        Enum(MediaType, name="media_type", create_type=False), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(32), index=True)
+    external_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_url: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    # api | search | manual | imported
+    resolution_method: Mapped[str] = mapped_column(String(16), default="search")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    item: Mapped[Item] = relationship()
 
 
 class UserInteraction(Base):
@@ -279,3 +335,200 @@ class ModelConfig(Base):
     weights: Mapped[dict] = mapped_column(JSONB, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Creator(Base):
+    """Canonical creator (director / author / writer / artist / developer / narrator).
+
+    Normalized name collapses spelling/casing variants across import sources."""
+
+    __tablename__ = "creators"
+    __table_args__ = (UniqueConstraint("normalized_name", name="uq_creator_normalized"),)
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    normalized_name: Mapped[str] = mapped_column(String(255), index=True)
+    kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ItemCreator(Base):
+    __tablename__ = "item_creators"
+
+    item_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    creator_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("creators.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String(32), primary_key=True, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    creator: Mapped[Creator] = relationship()
+
+
+class Series(Base):
+    __tablename__ = "series"
+    __table_args__ = (
+        UniqueConstraint("media_type", "normalized_name", name="uq_series_media_normalized"),
+    )
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    media_type: Mapped[MediaType] = mapped_column(
+        Enum(MediaType, name="media_type", create_type=False), index=True
+    )
+    name: Mapped[str] = mapped_column(String(512))
+    normalized_name: Mapped[str] = mapped_column(String(512), index=True)
+    franchise: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    items: Mapped[list[SeriesItem]] = relationship(back_populates="series", cascade="all, delete-orphan")
+
+
+class SeriesItem(Base):
+    __tablename__ = "series_items"
+
+    series_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True
+    )
+    item_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    sequence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    series: Mapped[Series] = relationship(back_populates="items")
+    item: Mapped[Item] = relationship()
+
+
+class ItemAlias(Base):
+    __tablename__ = "item_aliases"
+    __table_args__ = (
+        UniqueConstraint("item_id", "normalized_alias", name="uq_item_alias"),
+    )
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    item_id: Mapped[Any] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"))
+    alias: Mapped[str] = mapped_column(String(512))
+    normalized_alias: Mapped[str] = mapped_column(String(512), index=True)
+    source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CanonicalTag(Base):
+    __tablename__ = "canonical_tags"
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(128))
+    category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ItemTag(Base):
+    __tablename__ = "item_tags"
+
+    item_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("canonical_tags.id", ondelete="CASCADE"), primary_key=True
+    )
+    weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    tag: Mapped[CanonicalTag] = relationship()
+
+
+class UserItemState(Base):
+    """Single current-state row per (user, item). State changes are appended to
+    :class:`UserItemStateHistory` so the current row stays small and fast to query."""
+
+    __tablename__ = "user_item_state"
+    __table_args__ = (
+        UniqueConstraint("user_id", "item_id", name="uq_user_item_state"),
+        Index("ix_user_item_state_user_media_state", "user_id", "media_type", "state"),
+    )
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[Any] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    item_id: Mapped[Any] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"))
+    # Denormalized from the item so per-domain saved lists never need to join items.
+    media_type: Mapped[MediaType] = mapped_column(
+        Enum(MediaType, name="media_type", create_type=False), index=True
+    )
+    state: Mapped[ItemState] = mapped_column(Enum(ItemState, name="item_state", create_type=False))
+    source: Mapped[InterestSource] = mapped_column(
+        Enum(
+            InterestSource,
+            name="interest_source",
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        default=InterestSource.manual,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    item: Mapped[Item] = relationship()
+
+
+class UserItemStateHistory(Base):
+    __tablename__ = "user_item_state_history"
+    __table_args__ = (
+        Index("ix_user_item_state_history_user_item", "user_id", "item_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[Any] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    item_id: Mapped[Any] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"))
+    media_type: Mapped[MediaType] = mapped_column(Enum(MediaType, name="media_type", create_type=False))
+    old_state: Mapped[ItemState | None] = mapped_column(
+        Enum(ItemState, name="item_state", create_type=False), nullable=True
+    )
+    new_state: Mapped[ItemState | None] = mapped_column(
+        Enum(ItemState, name="item_state", create_type=False), nullable=True
+    )
+    reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SavedCollection(Base):
+    __tablename__ = "saved_collections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "media_type", "name", name="uq_collection_user_media_name"),
+    )
+
+    id: Mapped[Any] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[Any] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    media_type: Mapped[MediaType] = mapped_column(
+        Enum(MediaType, name="media_type", create_type=False), index=True
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    items: Mapped[list[SavedCollectionItem]] = relationship(
+        back_populates="collection", cascade="all, delete-orphan"
+    )
+
+
+class SavedCollectionItem(Base):
+    __tablename__ = "saved_collection_items"
+
+    collection_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("saved_collections.id", ondelete="CASCADE"), primary_key=True
+    )
+    item_id: Mapped[Any] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    collection: Mapped[SavedCollection] = relationship(back_populates="items")
+    item: Mapped[Item] = relationship()

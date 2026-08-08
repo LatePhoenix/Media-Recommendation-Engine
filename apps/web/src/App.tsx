@@ -1,38 +1,67 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, logout, User } from "./api";
+import { DOMAIN_LABEL, enabledDomains, slugForMedia } from "./domains";
 import AuthPage from "./pages/AuthPage";
 import OnboardingPage from "./pages/OnboardingPage";
-import FeedsPage from "./pages/FeedsPage";
+import DomainHomePage from "./pages/DomainHomePage";
+import BrowsePage from "./pages/BrowsePage";
+import SavedPage from "./pages/SavedPage";
+import SeriesPage from "./pages/SeriesPage";
+import AdminPage from "./pages/AdminPage";
+import ItemDetailPage from "./pages/ItemDetailPage";
 import ImportsPage from "./pages/ImportsPage";
+import { getTheme, toggleTheme, type Theme } from "./theme";
 
 function Shell({ user, onLogout, children }: { user: User; onLogout: () => void; children: ReactNode }) {
   const loc = useLocation();
-  const link = (to: string, label: string) => (
-    <Link to={to} className={loc.pathname === to ? "active" : ""}>
-      {label}
-    </Link>
-  );
+  const domains = useMemo(() => enabledDomains(user.enabled_media_types), [user.enabled_media_types]);
+  const isActive = (to: string) => loc.pathname === to || loc.pathname.startsWith(to + "/");
+  const [theme, setThemeState] = useState<Theme>(getTheme());
+
   return (
-    <div className="app-shell">
-      <header className="topbar">
+    <div className="app-shell with-nav">
+      <aside className="sidenav">
         <div className="brand">
           <div className="brand-mark" aria-hidden />
-          <h1>Media Recommendation Engine</h1>
-          <span>
-            {user.username} · hybrid · local-first
-          </span>
+          <strong>Media Engine</strong>
         </div>
-        <nav className="nav">
-          {link("/", "Feeds")}
-          {link("/onboarding", "Onboarding")}
-          {link("/imports", "Imports")}
+        <nav className="nav-group">
+          <span className="nav-label">Domains</span>
+          {domains.map((m) => {
+            const slug = slugForMedia(m);
+            return (
+              <Link key={m} to={`/${slug}`} className={isActive(`/${slug}`) ? "active" : ""}>
+                {DOMAIN_LABEL[m]}
+              </Link>
+            );
+          })}
+        </nav>
+        <nav className="nav-group">
+          <span className="nav-label">Account</span>
+          <Link to="/onboarding" className={isActive("/onboarding") ? "active" : ""}>
+            Onboarding
+          </Link>
+          <Link to="/imports" className={isActive("/imports") ? "active" : ""}>
+            Imports
+          </Link>
           <button type="button" className="linkish" onClick={onLogout}>
             Sign out
           </button>
         </nav>
-      </header>
-      {children}
+        <div className="nav-foot">
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setThemeState(toggleTheme())}
+            title="Toggle light / dark"
+          >
+            {theme === "dark" ? "◐ Light" : "◑ Dark"}
+          </button>
+          <span className="muted small">{user.username} · hybrid · local-first</span>
+        </div>
+      </aside>
+      <main className="content">{children}</main>
     </div>
   );
 }
@@ -88,10 +117,12 @@ export default function App() {
     navigate("/login");
   };
 
+  const domains = enabledDomains(user.enabled_media_types);
+  const home = domains.length ? `/${slugForMedia(domains[0])}` : "/onboarding";
+
   return (
     <Shell user={user} onLogout={onLogout}>
       <Routes>
-        <Route path="/" element={<FeedsPage />} />
         <Route
           path="/onboarding"
           element={
@@ -99,13 +130,21 @@ export default function App() {
               onComplete={async () => {
                 const me = await api.updateMe({ onboarding_complete: true });
                 setUser(me);
-                navigate("/");
+                navigate(home);
               }}
             />
           }
         />
         <Route path="/imports" element={<ImportsPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/:domain" element={<DomainHomePage />} />
+        <Route path="/:domain/browse" element={<BrowsePage />} />
+        <Route path="/:domain/saved" element={<SavedPage />} />
+        <Route path="/:domain/series" element={<SeriesPage />} />
+        <Route path="/:domain/series/:seriesId" element={<SeriesPage />} />
+        <Route path="/:domain/admin" element={<AdminPage />} />
+        <Route path="/:domain/item/:itemId" element={<ItemDetailPage />} />
+        <Route path="/" element={<Navigate to={home} replace />} />
+        <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>
     </Shell>
   );

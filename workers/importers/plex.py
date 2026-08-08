@@ -186,6 +186,9 @@ class PlexConnector:
                 "ratingKey": rating_key,
                 "type": plex_type,
                 "guid": element.get("guid"),
+                # Provider guids (imdb://tt…, tmdb://…, tvdb://…) enable verified
+                # external links; requested via includeGuids=1.
+                "guids": [g.get("id") for g in element.findall("Guid") if g.get("id")],
                 "viewCount": element.get("viewCount"),
                 "viewOffset": element.get("viewOffset"),
                 "duration": element.get("duration"),

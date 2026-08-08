@@ -13,8 +13,9 @@ from app.models import (
     User,
     UserInteraction,
 )
-from app.recommender import FEED_TITLES, generate_feed
+from app.recommender import FEED_TITLES
 from app.schemas import RecommendationAction, RecommendationFeedOut
+from app.services.recommendation import RecommendationService
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
@@ -31,9 +32,16 @@ def get_feed(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> RecommendationFeedOut:
+    """Deprecated: media-agnostic feed. Prefer /api/{domain}/recommendations/feeds/{feed_key}.
+
+    Retained for backward compatibility; scopes to the user's first enabled domain
+    so it never mixes media types.
+    """
     if feed_key not in FEED_TITLES:
         raise HTTPException(status_code=404, detail="Unknown feed")
-    return generate_feed(db, user, feed_key, limit=limit)
+    service = RecommendationService(db)
+    media_type = service.default_media_type(user)
+    return service.feed(user, media_type, feed_key, limit=limit)
 
 
 @router.post("/actions")

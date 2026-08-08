@@ -12,6 +12,130 @@ export const RATING_LABELS = [
 
 export type RatingLabel = (typeof RATING_LABELS)[number];
 
+export const ITEM_STATES = [
+  "interested",
+  "shortlisted",
+  "in_progress",
+  "completed",
+  "passed",
+  "hidden",
+] as const;
+export type ItemState = (typeof ITEM_STATES)[number];
+
+export type SavedSort = "recently_added" | "priority" | "release_date" | "score";
+export type BrowseSort = "popularity" | "title" | "release_year" | "recently_added";
+
+export interface SavedItem {
+  item: Item;
+  state: ItemState;
+  source: string;
+  notes?: string | null;
+  priority?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItemStateRow {
+  item_id: string;
+  media_type: MediaType;
+  state: ItemState;
+  source: string;
+  notes?: string | null;
+  priority?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Collection {
+  id: string;
+  media_type: MediaType;
+  name: string;
+  description?: string | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionDetail extends Collection {
+  items: Item[];
+}
+
+export interface Series {
+  id: string;
+  media_type: MediaType;
+  name: string;
+  franchise?: string | null;
+}
+
+export interface SeriesDetail extends Series {
+  items: Item[];
+}
+
+export interface Creator {
+  id: string;
+  name: string;
+  kind?: string | null;
+}
+
+export interface CreatorDetail extends Creator {
+  items: Item[];
+}
+
+export interface ExternalLink {
+  provider: string;
+  label: string;
+  external_key?: string | null;
+  external_url: string;
+  confidence: number;
+  resolution_method: string;
+  verified: boolean;
+}
+
+export interface ItemDetail extends Item {
+  description?: string | null;
+  links: ExternalLink[];
+}
+
+export interface ModelConfig {
+  media_type: MediaType;
+  name: string;
+  weights: Record<string, number>;
+  active: boolean;
+}
+
+export interface AdminModelConfig extends ModelConfig {
+  id: string;
+}
+
+export type DomainMetrics = Record<string, number | string | null>;
+
+export interface MetricsComparison {
+  media_type: MediaType;
+  control: DomainMetrics;
+  treatment: DomainMetrics;
+}
+
+export interface BrowseFilters {
+  q?: string;
+  genre?: string;
+  creator?: string;
+  series?: string;
+  language?: string;
+  release_year?: number;
+  year_min?: number;
+  year_max?: number;
+  length_min?: number;
+  length_max?: number;
+  publisher?: string;
+  narrator?: string;
+  platform?: string;
+  state?: ItemState;
+  anchors_only?: boolean;
+  sort?: BrowseSort;
+  limit?: number;
+  offset?: number;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -172,6 +296,86 @@ export const api = {
 
   importCsv: (rows: Record<string, unknown>[]) =>
     request("/api/imports/csv", { method: "POST", body: JSON.stringify({ rows }) }),
+
+  // --- Per-domain (Phase 1/2). `domain` is a plural slug, e.g. "movies". ---
+
+  domainFeed: (domain: string, feedKey: string, limit = 20) =>
+    request<RecommendationFeed>(`/api/${domain}/recommendations/feeds/${feedKey}?limit=${limit}`),
+
+  modelConfig: (domain: string) => request<ModelConfig>(`/api/${domain}/model-config`),
+
+  itemLinks: (domain: string, itemId: string) =>
+    request<ExternalLink[]>(`/api/${domain}/items/${itemId}/links`),
+
+  item: (domain: string, itemId: string) =>
+    request<ItemDetail>(`/api/${domain}/catalog/items/${itemId}`),
+
+  listSeries: (domain: string) => request<Series[]>(`/api/${domain}/series`),
+
+  series: (domain: string, seriesId: string) =>
+    request<SeriesDetail>(`/api/${domain}/series/${seriesId}`),
+
+  creator: (domain: string, creatorId: string) =>
+    request<CreatorDetail>(`/api/${domain}/creators/${creatorId}`),
+
+  // --- Admin / ops (Phase 5) ---
+
+  adminModelConfigs: (domain: string) =>
+    request<AdminModelConfig[]>(`/api/admin/${domain}/model-configs`),
+
+  adminMetrics: (domain: string, config?: string) =>
+    request<DomainMetrics>(
+      `/api/admin/${domain}/metrics${config ? `?config=${encodeURIComponent(config)}` : ""}`,
+    ),
+
+  adminCompare: (domain: string, treatment: string, control = "default") =>
+    request<MetricsComparison>(
+      `/api/admin/${domain}/metrics/compare?control=${encodeURIComponent(control)}&treatment=${encodeURIComponent(treatment)}`,
+    ),
+
+  browse: (domain: string, filters: BrowseFilters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+    });
+    const qs = params.toString();
+    return request<Item[]>(`/api/${domain}/catalog/items${qs ? `?${qs}` : ""}`);
+  },
+
+  getState: (domain: string, itemId: string) =>
+    request<ItemStateRow | null>(`/api/${domain}/items/${itemId}/state`),
+
+  setState: (
+    domain: string,
+    itemId: string,
+    payload: { state: ItemState; notes?: string; priority?: number },
+  ) =>
+    request<ItemStateRow>(`/api/${domain}/items/${itemId}/state`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  clearState: (domain: string, itemId: string) =>
+    request(`/api/${domain}/items/${itemId}/state`, { method: "DELETE" }),
+
+  listSaved: (
+    domain: string,
+    opts: { state?: ItemState[]; sort?: SavedSort } = {},
+  ) => {
+    const params = new URLSearchParams();
+    (opts.state || []).forEach((s) => params.append("state", s));
+    if (opts.sort) params.set("sort", opts.sort);
+    const qs = params.toString();
+    return request<SavedItem[]>(`/api/${domain}/saved${qs ? `?${qs}` : ""}`);
+  },
+
+  listCollections: (domain: string) => request<Collection[]>(`/api/${domain}/collections`),
+
+  createCollection: (domain: string, payload: { name: string; description?: string }) =>
+    request<Collection>(`/api/${domain}/collections`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 
 export function logout() {

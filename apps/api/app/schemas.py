@@ -11,6 +11,8 @@ from app.models import (
     InteractionContext,
     InteractionSource,
     InteractionType,
+    InterestSource,
+    ItemState,
     MediaType,
 )
 
@@ -162,6 +164,141 @@ class RecommendationAction(BaseModel):
     action: str  # rate | save | pass | consume | finish | dismiss
     value: float | None = None
     rating_label: str | None = None
+
+
+# --- Interest layer (Phase 2) ---
+
+
+class SetStateIn(BaseModel):
+    state: ItemState
+    notes: str | None = Field(default=None, max_length=2000)
+    priority: int | None = Field(default=None, ge=0, le=1000)
+    source: InterestSource = InterestSource.manual
+
+
+class ItemStateOut(BaseModel):
+    item_id: UUID
+    media_type: MediaType
+    state: ItemState
+    source: InterestSource
+    notes: str | None = None
+    priority: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SavedItemOut(BaseModel):
+    """A saved-state row joined with its catalog item, for the saved pages."""
+
+    item: ItemOut
+    state: ItemState
+    source: InterestSource
+    notes: str | None = None
+    priority: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CollectionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    is_default: bool = False
+
+
+class CollectionOut(BaseModel):
+    id: UUID
+    media_type: MediaType
+    name: str
+    description: str | None = None
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CollectionItemIn(BaseModel):
+    item_id: UUID
+    sort_order: int = 0
+
+
+class CollectionDetailOut(CollectionOut):
+    items: list[ItemOut] = []
+
+
+class ExternalLinkOut(BaseModel):
+    provider: str
+    label: str
+    external_key: str | None = None
+    external_url: str
+    confidence: float
+    resolution_method: str
+    verified: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ManualLinkIn(BaseModel):
+    provider: str = Field(min_length=1, max_length=32)
+    external_url: str = Field(min_length=1, max_length=2048)
+    external_key: str | None = Field(default=None, max_length=255)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class ItemDetailOut(ItemOut):
+    links: list[ExternalLinkOut] = []
+
+
+class SeriesOut(BaseModel):
+    id: UUID
+    media_type: MediaType
+    name: str
+    franchise: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SeriesDetailOut(SeriesOut):
+    items: list[ItemOut] = []
+
+
+class CreatorOut(BaseModel):
+    id: UUID
+    name: str
+    kind: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class CreatorDetailOut(CreatorOut):
+    items: list[ItemOut] = []
+
+
+class ModelConfigOut(BaseModel):
+    media_type: MediaType
+    name: str
+    weights: dict[str, float]
+    active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminModelConfigOut(BaseModel):
+    id: UUID
+    media_type: MediaType
+    name: str
+    weights: dict[str, float]
+    active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminModelConfigIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    weights: dict[str, float] = Field(default_factory=dict)
+    active: bool = True
 
 
 # --- Imports ---
