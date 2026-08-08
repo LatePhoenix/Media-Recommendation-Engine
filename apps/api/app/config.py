@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     # Only honor X-Forwarded-For when the app runs behind a trusted proxy that sets it;
     # otherwise clients could spoof the header to evade per-IP limits.
     trust_proxy_headers: bool = False
+    # Local-first: allow RFC1918/loopback for import source base_urls (Plex/Jellyfin).
+    # Link-local / cloud metadata remain blocked. Set false for internet-exposed deploys.
+    allow_private_import_urls: bool = True
+    # When false, /register returns 403 (after first-user bootstrap use this to lock signup).
+    registration_enabled: bool = True
+    # When true, rate-limiter backend errors allow the request; default fail-closed (503).
+    rate_limit_fail_open: bool = False
 
     @field_validator("api_secret_key")
     @classmethod

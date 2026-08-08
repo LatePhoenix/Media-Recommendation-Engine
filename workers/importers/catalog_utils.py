@@ -29,9 +29,20 @@ def upsert_item(
     db: Session,
     source: str,
     norm: Any,
+    *,
+    import_source_id: Any | None = None,
 ) -> Item:
     """Upsert by external ref, else fuzzy title/year/media_type match."""
     meta = MetadataNormalizationService(db)
+    cover = getattr(norm, "cover_url", None)
+    if cover and import_source_id and str(cover).startswith("/"):
+        from urllib.parse import quote
+
+        cover = (
+            f"/api/imports/sources/{import_source_id}/artwork"
+            f"?path={quote(str(cover), safe='/')}"
+        )
+
     existing_ref = (
         db.query(ItemExternalRef)
         .filter(ItemExternalRef.source == source, ItemExternalRef.external_id == norm.external_id)
@@ -57,7 +68,7 @@ def upsert_item(
                 release_year=norm.release_year,
                 description=norm.description,
                 runtime_or_length=norm.runtime_or_length,
-                cover_url=norm.cover_url,
+                cover_url=cover,
                 popularity=1.0,
             )
             db.add(item)
@@ -77,8 +88,8 @@ def upsert_item(
     item.creators = norm.creators or item.creators or []
     if norm.description:
         item.description = norm.description
-    if norm.cover_url:
-        item.cover_url = norm.cover_url
+    if cover:
+        item.cover_url = cover
     if norm.series:
         item.series = norm.series
     item.popularity = min(float(item.popularity or 0.0) + 0.1, POPULARITY_CEILING)

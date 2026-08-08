@@ -4,17 +4,20 @@ import json
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.config import get_settings
 from app.db import get_db
 from app.models import ImportJob, ImportJobStatus, ImportSource, User
-from app.net_security import UnsafeUrlError, validate_public_url
+from app.net_security import UnsafeUrlError, validate_import_url
 from app.schemas import CsvImportPayload, ImportJobOut, ImportSourceCreate, ImportSourceOut
-from app.security_crypto import encrypt_credentials
+from app.security_crypto import decrypt_credentials, encrypt_credentials
 from workers.importers.runner import enqueue_import_job, run_import_job_sync
+from workers.importers.secure_http import pinned_async_client
 
 router = APIRouter(prefix="/api/imports", tags=["imports"])
 
@@ -35,7 +38,10 @@ def create_source(
 ) -> ImportSource:
     if payload.base_url:
         try:
-            validate_public_url(payload.base_url)
+            validate_import_url(
+                payload.base_url,
+                allow_private=get_settings().allow_private_import_urls,
+            )
         except UnsafeUrlError as exc:
             raise HTTPException(status_code=422, detail=f"Invalid base_url: {exc}") from exc
     encrypted = None
@@ -53,6 +59,54 @@ def create_source(
     db.commit()
     db.refresh(src)
     return src
+
+
+@router.get("/sources/{source_id}/artwork")
+async def fetch_artwork(
+    source_id: UUID,
+    path: str = Query(..., min_length=1, max_length=2048),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Proxy library artwork using stored credentials (never embed tokens in cover URLs)."""
+    if not path.startswith("/") or path.startswith("//") or "://" in path:
+        raise HTTPException(status_code=422, detail="path must be a server-relative path")
+    src = db.get(ImportSource, source_id)
+    if not src or src.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Import source not found")
+    if not src.base_url:
+        raise HTTPException(status_code=400, detail="Import source has no base_url")
+
+    credentials: dict = {}
+    if src.credentials_encrypted:
+        credentials = json.loads(decrypt_credentials(src.credentials_encrypted))
+    token = (
+        credentials.get("plex_token")
+        or credentials.get("token")
+        or credentials.get("api_key")
+        or credentials.get("access_token")
+    )
+    headers: dict[str, str] = {}
+    if src.source == "plex" and token:
+        headers["X-Plex-Token"] = str(token)
+        headers["Accept"] = "*/*"
+    elif token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    url = f"{src.base_url.rstrip('/')}{path}"
+    try:
+        async with pinned_async_client(src.base_url, timeout=30.0) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+    except (UnsafeUrlError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail="Could not fetch artwork") from exc
+
+    content_type = resp.headers.get("content-type", "application/octet-stream")
+    return Response(
+        content=resp.content,
+        media_type=content_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.post("/sources/{source_id}/sync", response_model=ImportJobOut)

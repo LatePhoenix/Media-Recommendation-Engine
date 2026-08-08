@@ -10,7 +10,8 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.net_security import validate_public_url
+from app.config import get_settings
+from app.net_security import validate_import_url
 from app.models import (
     ImportJob,
     ImportJobStatus,
@@ -113,7 +114,10 @@ async def _run_job(db: Session, job_id: str, timeout: float | None = None) -> di
         # Re-validate the target immediately before any outbound request: the base_url
         # (or the DNS it points to) may have changed since the source was registered.
         if src.base_url:
-            validate_public_url(src.base_url)
+            validate_import_url(
+                src.base_url,
+                allow_private=get_settings().allow_private_import_urls,
+            )
         credentials: dict[str, Any] = {}
         if src.credentials_encrypted:
             credentials = json.loads(decrypt_credentials(src.credentials_encrypted))
@@ -135,7 +139,7 @@ async def _run_job(db: Session, job_id: str, timeout: float | None = None) -> di
 
         upserted = 0
         for norm in items:
-            upsert_item(db, src.source, norm)
+            upsert_item(db, src.source, norm, import_source_id=src.id)
             upserted += 1
 
         written = 0
@@ -168,11 +172,16 @@ async def _run_job(db: Session, job_id: str, timeout: float | None = None) -> di
             written += 1
 
         job.cursor = cursor
-        job.stats = {"items_upserted": upserted, "consumption_written": written}
+        stub = bool(cursor.get("stub")) if isinstance(cursor, dict) else False
+        job.stats = {
+            "items_upserted": upserted,
+            "consumption_written": written,
+            **({"stub": True} if stub else {}),
+        }
         job.status = ImportJobStatus.succeeded
         job.finished_at = datetime.now(timezone.utc)
         src.last_sync_at = job.finished_at
-        src.last_status = "succeeded"
+        src.last_status = "stub" if stub else "succeeded"
         db.add(src)
         db.commit()
         return job.stats

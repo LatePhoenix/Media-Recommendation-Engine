@@ -24,6 +24,11 @@ services:
       - ../workers:/workers
 
   web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web.dev
     volumes:
       - ../apps/web:/app
       - /app/node_modules
+    ports:
+      - "127.0.0.1:5173:5173"

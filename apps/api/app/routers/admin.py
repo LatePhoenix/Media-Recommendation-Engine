@@ -1,27 +1,55 @@
-"""Admin/ops routes: per-media model-config management and offline metrics (Phase 5).
+"""Admin/ops routes: per-media model-config management and offline metrics.
 
-Authenticated-only. There is no admin role in the data model yet, so these are gated
-by authentication; role-gating is a follow-up. Domains here are resolved by slug
-without the per-user enablement check so ops can inspect every vertical.
+Gated by require_admin (first registered user is admin by default).
+Domains are resolved by slug without per-user enablement so ops can inspect every vertical.
 """
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import require_admin
 from app.db import get_db
 from app.domains import resolve_domain
-from app.models import MediaType, ModelConfig, User
+from app.models import Item, MediaType, ModelConfig, User
 from app.schemas import AdminModelConfigIn, AdminModelConfigOut
+from app.services.metadata import MetadataNormalizationService
 from app.services.metrics import MetricsService
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-def admin_domain(domain: str = Path(...), _: User = Depends(get_current_user)) -> MediaType:
+class MergeItemsIn(BaseModel):
+    primary_id: UUID
+    duplicate_id: UUID
+
+
+def admin_domain(domain: str = Path(...), _: User = Depends(require_admin)) -> MediaType:
     return resolve_domain(domain)
+
+
+@router.post("/items/merge")
+def merge_items(
+    payload: MergeItemsIn,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Merge duplicate into primary; repoints FKs including UserInteraction."""
+    if payload.primary_id == payload.duplicate_id:
+        raise HTTPException(status_code=400, detail="primary and duplicate must differ")
+    primary = db.get(Item, payload.primary_id)
+    duplicate = db.get(Item, payload.duplicate_id)
+    if primary is None or duplicate is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if primary.media_type != duplicate.media_type:
+        raise HTTPException(status_code=400, detail="Items must share a media type")
+    MetadataNormalizationService(db).merge_items(primary, duplicate)
+    db.commit()
+    return {"ok": True, "primary_id": str(primary.id)}
 
 
 @router.get("/{domain}/model-configs", response_model=list[AdminModelConfigOut])

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ItemState, RatingLabel, RecommendationFeed } from "../api";
+import { api, ItemState, RatingLabel, RecommendationFeed, User } from "../api";
 import { DOMAIN_LABEL } from "../domains";
 import { useDomain } from "../useDomain";
 import MediaCard from "../components/MediaCard";
@@ -14,7 +14,7 @@ const FEEDS = [
   { key: "because_you_loved", title: "Because you loved…" },
 ];
 
-export default function DomainHomePage() {
+export default function DomainHomePage({ user }: { user: User }) {
   const domain = useDomain();
   const [feedKey, setFeedKey] = useState("best_next");
   const [feed, setFeed] = useState<RecommendationFeed | null>(null);
@@ -94,8 +94,13 @@ export default function DomainHomePage() {
         <p className="lead">
           Deterministic, single-domain ranking. Interested and Shortlist feed the scorer; Pass suppresses
           temporarily. <Link to={`/${domain.slug}/browse`}>Browse</Link> ·{" "}
-          <Link to={`/${domain.slug}/saved`}>Saved</Link> · <Link to={`/${domain.slug}/series`}>Series</Link> ·{" "}
-          <Link to={`/${domain.slug}/admin`}>Admin</Link>
+          <Link to={`/${domain.slug}/saved`}>Saved</Link> · <Link to={`/${domain.slug}/series`}>Series</Link>
+          {user.is_admin ? (
+            <>
+              {" "}
+              · <Link to={`/${domain.slug}/admin`}>Admin</Link>
+            </>
+          ) : null}
         </p>
         <div className="tabs">
           {FEEDS.map((f) => (

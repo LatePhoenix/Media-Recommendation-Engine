@@ -102,16 +102,18 @@ state (watched / play status).
 from different sources collapses into one item via normalized-title/alias matching
 (`item_aliases`), and denormalized creators/series/tags are resolved into canonical
 `creators` / `series` / `canonical_tags` (with `item_creators` / `series_items` /
-`item_tags` links). `SeriesDetailOut` powers franchise pages; `merge_items` is the
-admin dedup tool that repoints all references onto a surviving item.
+`item_tags` links). `SeriesDetailOut` powers franchise pages; `POST /api/admin/items/merge`
+is the admin dedup tool that repoints all references (including `UserInteraction`) onto a surviving item.
 
 > The media-agnostic `/api/recommendations/feeds/{feed_key}` is **deprecated**; it
 > now scopes to the user's first enabled domain. Prefer the per-domain route.
 
 ## Admin / ops (Phase 5)
 
-Authenticated; `{domain}` resolved by slug without the enablement check so ops can
-inspect every vertical. (Role-gating is a follow-up — no admin role in the model yet.)
+Authenticated; requires `is_admin` (first registered user is admin). `{domain}` is
+resolved by slug without the enablement check so ops can inspect every vertical.
+Registration can be locked with `REGISTRATION_ENABLED=false` after bootstrap
+(single-household / local-first default).
 
 | Method | Path | Query / Body | Response |
 |--------|------|--------------|----------|
@@ -119,10 +121,11 @@ inspect every vertical. (Role-gating is a follow-up — no admin role in the mod
 | POST | `/api/admin/{domain}/model-configs` | `{name, weights, active}` | upsert a config; activating one deactivates the rest |
 | GET | `/api/admin/{domain}/metrics` | `config?`, `k` | offline metrics (below) |
 | GET | `/api/admin/{domain}/metrics/compare` | `control=default`, `treatment`, `k` | `{control, treatment}` metric sets |
+| POST | `/api/admin/items/merge` | `{primary_id, duplicate_id}` | merge duplicate into primary (repoints interactions + FKs) |
 
 **Ranking (Phase 5):** the deterministic core stays authoritative. Components:
 `collaborative` (item-item co-occurrence CF, built nightly by
-`rebuild_collaborative_edges`), `content`, `embedding` (optional, pgvector), `popularity`,
+`rebuild_collaborative_edges` via the `recommender-scheduler` service), `content`, `embedding` (optional, pgvector), `popularity`,
 `novelty`, `interest` (saved affinity), `serendipity`, `availability` (on a connected
 server), minus `seen`/`recent_pass` penalties. Candidate generation is layered
 (popularity/trending + collaborative expansion), and re-ranking caps franchise

@@ -136,12 +136,15 @@ export default function App() {
           }
         />
         <Route path="/imports" element={<ImportsPage />} />
-        <Route path="/:domain" element={<DomainHomePage />} />
+        <Route path="/:domain" element={<DomainHomePage user={user} />} />
         <Route path="/:domain/browse" element={<BrowsePage />} />
         <Route path="/:domain/saved" element={<SavedPage />} />
         <Route path="/:domain/series" element={<SeriesPage />} />
         <Route path="/:domain/series/:seriesId" element={<SeriesPage />} />
-        <Route path="/:domain/admin" element={<AdminPage />} />
+        <Route
+          path="/:domain/admin"
+          element={user.is_admin ? <AdminPage /> : <Navigate to={home} replace />}
+        />
         <Route path="/:domain/item/:itemId" element={<ItemDetailPage />} />
         <Route path="/" element={<Navigate to={home} replace />} />
         <Route path="*" element={<Navigate to={home} replace />} />

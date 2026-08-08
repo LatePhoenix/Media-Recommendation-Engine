@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -79,12 +81,13 @@ def recommendation_action(
         context=InteractionContext.recommendation_feed,
         confidence=1.0,
         meta={"event_id": str(event.id)},
+        timestamp=datetime.now(timezone.utc),
     )
     event.action_taken = action
     db.add(interaction)
     db.add(event)
     prefs = dict(user.preferences or {})
-    prefs["last_interaction_at"] = "now"
+    prefs["last_interaction_at"] = interaction.timestamp.isoformat()
     user.preferences = prefs
     db.add(user)
     db.commit()

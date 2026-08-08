@@ -4,7 +4,6 @@ from typing import Any
 from urllib.parse import quote
 from xml.etree import ElementTree  # Element type only; parsing uses defusedxml below
 
-import httpx
 from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from workers.importers.base import (
@@ -14,6 +13,7 @@ from workers.importers.base import (
     NormalizedItem,
 )
 from workers.importers.catalog_utils import parse_year
+from workers.importers.secure_http import pinned_async_client
 
 
 class PlexConnector:
@@ -48,7 +48,7 @@ class PlexConnector:
         if not token:
             raise ValueError("Plex requires a Plex access token")
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with pinned_async_client(self.base_url, timeout=30.0) as client:
             response = await client.get(
                 f"{self.base_url}/identity",
                 headers=self._headers(str(token)),
@@ -62,7 +62,7 @@ class PlexConnector:
             )
 
     async def list_libraries(self, session: ConnectorSession) -> list[Library]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with pinned_async_client(self.base_url, timeout=30.0) as client:
             response = await client.get(
                 f"{self.base_url}/library/sections",
                 headers=self._headers(session.token),
@@ -97,7 +97,7 @@ class PlexConnector:
         items: list[NormalizedItem] = []
         self._consumption = []
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with pinned_async_client(self.base_url, timeout=60.0) as client:
             for library in sections:
                 response = await client.get(
                     f"{self.base_url}/library/sections/{quote(library.id, safe='')}/all",
@@ -179,8 +179,8 @@ class PlexConnector:
             release_year=parse_year(element.get("year")),
             description=element.get("summary"),
             runtime_or_length=int(duration_ms / 1000) if duration_ms else None,
-            # The token is deliberately not embedded in persisted URLs.
-            cover_url=f"{self.base_url}{thumb}" if thumb else None,
+            # Relative thumb path — browsers fetch via authenticated artwork proxy.
+            cover_url=thumb if thumb else None,
             external_url=external_url,
             raw={
                 "ratingKey": rating_key,

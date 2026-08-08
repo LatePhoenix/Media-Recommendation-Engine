@@ -26,6 +26,11 @@ _register_ip_limiter = IPRateLimiter("register", settings.register_rate_limit_pe
     dependencies=[Depends(_register_ip_limiter)],
 )
 def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
+    if not settings.registration_enabled and db.query(User).count() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled.",
+        )
     # Return a single generic message for both collisions so an attacker cannot use
     # registration to enumerate which usernames/emails already have accounts.
     existing = (
@@ -37,10 +42,12 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
         raise HTTPException(
             status_code=400, detail="That username or email is not available."
         )
+    is_first = db.query(User).count() == 0
     user = User(
         email=payload.email,
         username=payload.username,
         hashed_password=hash_password(payload.password),
+        is_admin=is_first,
     )
     db.add(user)
     db.commit()
