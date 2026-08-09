@@ -97,6 +97,10 @@ def build_user_profile(
     )
     if media_type is not None:
         q = q.filter(Item.media_type == media_type)
+    # Bound the scan to the most-recent N interactions (see profile_max_interactions).
+    # Uses the ix_interactions_user_ts index so profile-building stays roughly constant
+    # regardless of how long the account has been accumulating history.
+    q = q.order_by(UserInteraction.timestamp.desc()).limit(get_settings().profile_max_interactions)
 
     genre_weights: dict[str, float] = {}
     tag_weights: dict[str, float] = {}

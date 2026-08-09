@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # Feed generation is expensive (candidate retrieval + scoring + event writes), so
     # cap how often a single authenticated user can regenerate a feed.
     feed_rate_limit_per_minute: int = 30           # per authenticated user
+    # Cap how many of a user's most-recent interactions are folded into their taste
+    # profile on each feed generation. Bounds profile-building time and memory so a
+    # long-lived account with a huge interaction history doesn't degrade feed latency.
+    profile_max_interactions: int = 5000
     # RecommendationEvent rows are written on every feed generation. Prune rows for a
     # (user, feed) older than this on each generation so the table can't grow unbounded.
     # Keep generous: offline metrics are computed from these rows. 0 disables pruning.

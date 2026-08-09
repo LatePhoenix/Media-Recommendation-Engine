@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
 from workers.importers.base import (
     ConnectorSession,
     Library,
@@ -13,6 +11,7 @@ from workers.importers.base import (
     NormalizedItem,
 )
 from workers.importers.catalog_utils import parse_year
+from workers.importers.secure_http import pinned_async_client
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 
@@ -55,7 +54,10 @@ class TmdbConnector:
         items: list[NormalizedItem] = []
         max_page_seen = page
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # Route through the SSRF-validated, IP-pinned client (base_url is user-supplied
+        # for tmdb sources) so this connector gets the same DNS-rebinding / redirect
+        # protection as the Plex/Jellyfin/etc. connectors.
+        async with pinned_async_client(self.base_url, timeout=60.0) as client:
             for lib in libs:
                 kind = "movie" if (lib.media_hint or lib.id) == "movie" else "tv"
                 for endpoint in (f"/3/trending/{kind}/week", f"/3/{kind}/popular"):

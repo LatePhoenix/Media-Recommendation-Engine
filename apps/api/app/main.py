@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.paths import ensure_sys_path
@@ -10,6 +14,8 @@ ensure_sys_path()
 
 from app.config import get_settings
 from app.routers import admin, auth, catalog, domain, imports, interactions, onboarding, recommendations
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -44,6 +50,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+@app.exception_handler(IntegrityError)
+async def _integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+    """Safety net: a DB constraint violation (FK / unique) that reaches here would
+    otherwise become an opaque HTTP 500. Log the full detail server-side and return a
+    generic 409 so no schema/constraint internals leak to the client. Handlers that can
+    give a more specific status (404 for a missing item, 400 for a known collision)
+    should still do so up front — this only catches what slips through."""
+    logger.warning(
+        "IntegrityError on %s %s: %s", request.method, request.url.path, exc
+    )
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "The request conflicts with existing data."},
+    )
+
 
 app.include_router(auth.router)
 app.include_router(catalog.router)
