@@ -1,0 +1,42 @@
+# Media Recommendation Engine - Redis configuration template (Windows native)
+# Written next to the Redis working directory (ProgramData\...\redis\redis.conf).
+# Placeholders replaced by Initialize-MediaRecRedis.ps1:
+#   {{REDIS_PASSWORD}}  {{PORT}}
+#
+# Paths below are relative to the Redis working directory so MSYS-built
+# redis-server.exe does not mishandle Windows drive letters.
+
+bind 127.0.0.1
+protected-mode yes
+port {{PORT}}
+tcp-backlog 511
+timeout 0
+tcp-keepalive 300
+
+daemonize no
+pidfile ./redis.pid
+
+loglevel notice
+logfile ./redis.log
+
+databases 16
+
+dir ./data
+dbfilename dump.rdb
+save 900 1
+save 300 10
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+
+appendonly yes
+appendfilename appendonly.aof
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+
+requirepass {{REDIS_PASSWORD}}
+
+maxmemory-policy noeviction

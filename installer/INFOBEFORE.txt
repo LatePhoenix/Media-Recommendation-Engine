@@ -1,0 +1,15 @@
+Welcome to Media Recommendation Engine
+
+This installer sets up a local recommendation app on your PC.
+
+What gets installed
+- Application files under Program Files
+- Background services (database, cache, API, workers)
+- Your data and settings under ProgramData (kept across upgrades)
+
+You do not need Docker, WSL, or a separate Python install.
+
+After setup, open the Start Menu shortcut to use the app in your browser
+(http://127.0.0.1:8000/).
+
+Publisher: Singularity Solutions and Services

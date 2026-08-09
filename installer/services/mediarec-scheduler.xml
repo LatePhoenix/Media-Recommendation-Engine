@@ -1,0 +1,33 @@
+<!--
+  WinSW: mediarec-scheduler
+  Docs: docs/packaging/windows-services.md
+
+  CF rebuild enqueue loop (replaces infra/entrypoint-recommender-scheduler.sh).
+  Substitutions: __PROGRAMDATA__, __INSTALLROOT__
+-->
+<service>
+  <id>mediarec-scheduler</id>
+  <name>Media Recommendation Engine Scheduler</name>
+  <description>Periodically enqueues collaborative-filter rebuild jobs.</description>
+  <executable>%BASE%\..\python\python.exe</executable>
+  <arguments>-m app.launch scheduler</arguments>
+  <workingdirectory>__INSTALLROOT__\app\api</workingdirectory>
+  <env name="MEDIAREC_ROOT" value="__INSTALLROOT__"/>
+  <env name="MEDIAREC_ENV_FILE" value="__PROGRAMDATA__\config\.env"/>
+  <env name="MEDIAREC_WAIT_DEPS_SECONDS" value="120"/>
+  <env name="CF_REBUILD_INTERVAL_SECONDS" value="86400"/>
+  <env name="MEDIAREC_SCHEDULER_WARMUP_SECONDS" value="30"/>
+  <depend>mediarec-redis</depend>
+  <depend>mediarec-worker</depend>
+  <logpath>__PROGRAMDATA__\logs\mediarec-scheduler</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <stoptimeout>15 sec</stoptimeout>
+</service>

@@ -16,6 +16,16 @@ Media types: movies, TV, books, audiobooks, comics, games — each an operationa
 
 ## Quick start
 
+### Windows end users (native installer)
+
+Build or download `MediaRecommendationEngine-Setup-*.exe` — see [`installer/BUILD.md`](installer/BUILD.md) and [`docs/packaging/README.md`](docs/packaging/README.md).
+
+- No Docker Desktop, WSL, or host Python required
+- App URL after install: http://127.0.0.1:8000/ (UI + API)
+- Post-install smoke: `Verify-NativeInstall.ps1` under Program Files `\scripts`
+
+### Developers (optional Compose)
+
 ```bash
 cp .env.example .env
 # Set API_SECRET_KEY (and prefer rotating POSTGRES_PASSWORD / REDIS_PASSWORD).
@@ -23,16 +33,15 @@ docker compose -f infra/docker-compose.yml up --build
 # Or: make up
 ```
 
-For live-reload bind mounts while developing inside Docker:
+For live-reload bind mounts while developing inside Compose:
 
 ```bash
 docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build
 # Or: make dev
 ```
 
-(The Windows installer uses the base compose file only — no bind mounts — so Program Files ACLs cannot block the web container.)
-
-- Web: http://localhost:5173 (nginx static in prod compose; Vite HMR in `.dev.yml`)
+- Web (Compose): http://localhost:5173 (nginx static in prod compose; Vite HMR in `.dev.yml`)
+- Native install UI/API: http://127.0.0.1:8000/
 - API docs: http://localhost:8000/docs
 - Liveness: http://localhost:8000/health
 - Readiness: http://localhost:8000/health/ready
@@ -108,7 +117,10 @@ workers/recommender/      Nightly / online jobs
 packages/shared-schema/   Shared enums / OpenAPI types
 packages/enrichment/      EnrichmentPort + NoOp / Ollama stubs
 docs/architecture/        Design, ERD, API contract, roadmap
-infra/                    Docker Compose, Dockerfiles
+docs/packaging/           Native Windows packaging runbooks
+installer/                Inno Setup + WinSW service templates
+infra/                    Optional Docker Compose for developers
+scripts/                  Payload build / verify / service helpers
 ```
 
 ## Recommendation principle
@@ -133,6 +145,7 @@ loads covers through an authenticated `/api/imports/sources/{id}/artwork` proxy.
 
 ## Docs
 
+- [Packaging (native Windows)](docs/packaging/README.md)
 - [Architecture overview](docs/architecture/overview.md)
 - [ERD / schema](docs/architecture/erd.md)
 - [API contract](docs/architecture/api-contract.md)

@@ -1,0 +1,147 @@
+# Build the native Windows installer (no Docker runtime).
+# Phase 9 — docs/packaging/ci-release.md
+
+name: Build native Windows installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create/update a GitHub Release with the Setup.exe"
+        type: boolean
+        default: false
+      skip_download:
+        description: "Reuse Actions cache only (SkipDownload); still builds web/python trees"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Package + ISCC
+    runs-on: windows-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = ""
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -match '^v(.+)$') {
+            $v = $Matches[1]
+          } else {
+            $v = (Get-Content -LiteralPath installer\VERSION -Raw).Trim()
+          }
+          if (-not $v) { throw "Could not resolve installer version" }
+          Set-Content -LiteralPath installer\VERSION -Value $v -NoNewline -Encoding ascii
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Installer version: $v"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Cache native binary downloads
+        uses: actions/cache@v4
+        with:
+          path: dist/cache
+          key: native-bin-${{ runner.os }}-${{ hashFiles('scripts/package_python_runtime.ps1', 'scripts/package_postgres_windows.ps1', 'scripts/package_redis_windows.ps1', 'docs/packaging/postgres-distribution.md', 'docs/packaging/redis-distribution.md', 'docs/packaging/python-runtime.md') }}
+          restore-keys: |
+            native-bin-${{ runner.os }}-
+
+      - name: Assemble native payload
+        shell: pwsh
+        run: |
+          $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\scripts\prepare_native_installer_payload.ps1")
+          if ("${{ inputs.skip_download }}" -eq "true") {
+            $args += "-SkipDownload"
+          }
+          & powershell @args
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw "ISCC.exe not found after Inno Setup install" }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & $iscc /? | Select-Object -First 3
+
+      - name: Compile Setup.exe
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path installer\output | Out-Null
+          & $env:ISCC "/DMyAppVersion=$ver" installer\MediaRecommendationEngine.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $setup = Get-ChildItem installer\output\MediaRecommendationEngine-Setup-*.exe | Select-Object -First 1
+          if (-not $setup) { throw "Setup.exe not produced under installer\output" }
+          "SETUP_PATH=$($setup.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "SETUP_NAME=$($setup.Name)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Built $($setup.FullName) ($([math]::Round($setup.Length/1MB,1)) MB)"
+
+      - name: Checksums + portable payload zip (internal)
+        shell: pwsh
+        run: |
+          $setup = Get-Item $env:SETUP_PATH
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $setup.FullName).Hash.ToLowerInvariant()
+          $sumPath = Join-Path $setup.DirectoryName ($setup.BaseName + ".sha256")
+          Set-Content -LiteralPath $sumPath -Value "$sha  $($setup.Name)" -Encoding ascii
+          "SHA256_PATH=$sumPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "SHA256: $sha"
+
+          $portable = Join-Path installer\output ("MediaRecommendationEngine-portable-" + "${{ steps.ver.outputs.version }}" + ".zip")
+          if (Test-Path $portable) { Remove-Item $portable -Force }
+          Compress-Archive -Path (Join-Path $PWD "dist\native-windows\*") -DestinationPath $portable -CompressionLevel Optimal
+          $psha = (Get-FileHash -Algorithm SHA256 -LiteralPath $portable).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath ($portable + ".sha256") -Value "$psha  $(Split-Path $portable -Leaf)" -Encoding ascii
+          "PORTABLE_PATH=$portable" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-windows-installer-${{ steps.ver.outputs.version }}
+          path: |
+            installer/output/MediaRecommendationEngine-Setup-*.exe
+            installer/output/MediaRecommendationEngine-Setup-*.sha256
+            installer/output/MediaRecommendationEngine-portable-*.zip
+            installer/output/MediaRecommendationEngine-portable-*.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.ver.outputs.version) }}
+          name: Media Recommendation Engine ${{ steps.ver.outputs.version }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.create_release == true }}
+          generate_release_notes: true
+          files: |
+            installer/output/MediaRecommendationEngine-Setup-*.exe
+            installer/output/MediaRecommendationEngine-Setup-*.sha256
+            installer/output/MediaRecommendationEngine-portable-*.zip
+            installer/output/MediaRecommendationEngine-portable-*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

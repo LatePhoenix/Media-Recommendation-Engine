@@ -1,38 +1,76 @@
-; Inno Setup script for the Media Recommendation Engine
-; Builds a Windows installer that deploys the Docker Compose stack, generates
-; secure secrets on first install, and adds Start/Stop shortcuts.
+; Native Windows installer (no Docker runtime).
+; Build payload first:
+;   .\scripts\prepare_native_installer_payload.ps1
+; Then:
+;   ISCC "/DMyAppVersion=0.1.0" installer\MediaRecommendationEngine.iss
 ;
-; Build:  iscc installer\MediaRecommendationEngine.iss   (run from the repo root)
-; Output: installer\output\MediaRecommendationEngine-Setup.exe
-;
-; Requires Inno Setup 6 (https://jrsoftware.org/isdl.php).
+; Optional code signing (release pipeline):
+;   ISCC with SignTool=... or post-sign installer\output\*-Setup.exe
+;   See docs/packaging/installer.md
 
 #define MyAppName "Media Recommendation Engine"
 #define MyAppShortName "MediaRecommendationEngine"
-#define MyAppVersion "0.1.0"
-#define MyAppPublisher "Media Recommendation Engine"
-#define MyAppURL "http://localhost:5173"
-; Paths below are relative to this .iss file (installer\), so ".." is the repo root.
+#ifndef MyAppVersion
+  #define MyAppVersion "0.1.0"
+#endif
+#define MyAppPublisher "Singularity Solutions and Services"
+#define MyAppURL "http://127.0.0.1:8000/"
+#define MyAppSupportURL "http://127.0.0.1:8000/"
 #define RepoRoot ".."
+#define PayloadRoot "..\dist\native-windows"
+
+#if !FileExists(PayloadRoot + "\runtime\python\python.exe")
+  #error Native payload missing: dist\native-windows\runtime\python\python.exe - run scripts\prepare_native_installer_payload.ps1 first.
+#endif
+#if !FileExists(PayloadRoot + "\runtime\postgres\bin\postgres.exe")
+  #error Native payload missing Postgres - run scripts\prepare_native_installer_payload.ps1 first.
+#endif
+#if !FileExists(PayloadRoot + "\runtime\redis\redis-server.exe")
+  #error Native payload missing Redis - run scripts\prepare_native_installer_payload.ps1 first.
+#endif
+#if !FileExists(PayloadRoot + "\app\web\index.html")
+  #error Native payload missing web UI - run scripts\prepare_native_installer_payload.ps1 (package_web_dist) first.
+#endif
 
 [Setup]
 AppId={{7C1F3A2E-9B54-4E7A-B0D2-6F1A2C3D4E5F}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppSupportURL}
+AppCopyright=Copyright (C) {#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+UsePreviousAppDir=yes
+UsePreviousGroup=yes
+UsePreviousTasks=yes
 OutputDir=output
-OutputBaseFilename={#MyAppShortName}-Setup
+OutputBaseFilename={#MyAppShortName}-Setup-{#MyAppVersion}
 SetupIconFile={#RepoRoot}\assets\icons\app-icon.ico
+UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\assets\icons\app-icon.ico
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoCopyright=Copyright (C) {#MyAppPublisher}
+VersionInfoDescription={#MyAppName} Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+WizardImageStretch=no
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
+; Upgrades keep ProgramData; only Program Files payload is replaced.
+CloseApplications=no
+RestartIfNeededByRun=no
+InfoBeforeFile=INFOBEFORE.txt
+; Uncomment and configure for Authenticode signing in CI:
+; SignTool=signtool
+; SignedUninstaller=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -40,59 +78,107 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
-[Files]
-; The whole repo (Compose builds images from source; runtime uses image
-; contents — no Program Files bind mounts), minus virtualenvs, VCS,
-; node_modules, local env/data, and this installer folder.
-Source: "{#RepoRoot}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; \
-  Excludes: "\.git\*,\.git,\.venv\*,\.venv,\node_modules\*,node_modules,\apps\web\dist\*,\.env,\pgdata\*,\data\*,*.pyc,__pycache__\*,\.pytest_cache\*,\.mypy_cache\*,\.ruff_cache\*,\.claude\*,\.claude,*.tsbuildinfo,\installer\*,\installer"
+[Dirs]
+; ProgramData roots created early so bootstrap can write config/data.
+; uninsneveruninstall: keep data across uninstall unless the user opts in (see [Code]).
+Name: "{commonappdata}\MediaRecommendationEngine"; Flags: uninsneveruninstall
+Name: "{commonappdata}\MediaRecommendationEngine\config"; Flags: uninsneveruninstall
+Name: "{commonappdata}\MediaRecommendationEngine\logs"; Flags: uninsneveruninstall
+Name: "{commonappdata}\MediaRecommendationEngine\postgres"; Flags: uninsneveruninstall
+Name: "{commonappdata}\MediaRecommendationEngine\redis"; Flags: uninsneveruninstall
+Name: "{commonappdata}\MediaRecommendationEngine\diagnostics"; Flags: uninsneveruninstall
 
-; Launcher scripts land in the app root so shortcuts can call them.
-Source: "setup-env.ps1";    DestDir: "{app}"; Flags: ignoreversion
-Source: "Start-MediaRec.ps1"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Stop-MediaRec.ps1";  DestDir: "{app}"; Flags: ignoreversion
+[Files]
+; Packaged runtimes + app trees (built by prepare_native_installer_payload.ps1)
+Source: "{#PayloadRoot}\runtime\*"; DestDir: "{app}\runtime"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#PayloadRoot}\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs ignoreversion
+
+; Branding + version stamp
+Source: "{#RepoRoot}\assets\icons\*"; DestDir: "{app}\assets\icons"; Flags: ignoreversion
+Source: "VERSION"; DestDir: "{app}"; DestName: "version.txt"; Flags: ignoreversion
+Source: "INFOBEFORE.txt"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion isreadme
+
+; Env template (secrets land in ProgramData, not Program Files)
+Source: "{#RepoRoot}\.env.example"; DestDir: "{app}\config"; DestName: ".env.example"; Flags: ignoreversion onlyifdoesntexist
+
+; Maintenance / bootstrap scripts (not primary UX)
+Source: "{#RepoRoot}\scripts\Initialize-MediaRecDatabase.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#RepoRoot}\scripts\Initialize-MediaRecRedis.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#RepoRoot}\scripts\package_winsw_services.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#RepoRoot}\scripts\Install-MediaRecServices.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#RepoRoot}\scripts\verify_winsw_services.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "Initialize-NativeInstall.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "Collect-Diagnostics.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#RepoRoot}\scripts\Verify-NativeInstall.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+
+; Service XML templates (also staged under runtime\winsw at bootstrap)
+Source: "services\*.xml"; DestDir: "{app}\services"; Flags: ignoreversion
+Source: "redis\redis.conf.template"; DestDir: "{app}\runtime\redis"; DestName: "redis.conf.template"; Flags: ignoreversion
+
+; User-facing open / stop / diagnostics (no Docker; no interactive PowerShell Start)
+Source: "Open-MediaRec.url"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Stop-MediaRecServices.vbs"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Collect-Diagnostics.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Start-MediaRec.ps1"""; \
-  WorkingDir: "{app}"; IconFilename: "{app}\assets\icons\app-icon.ico"; \
-  Comment: "Start the Media Recommendation Engine"
-Name: "{group}\Stop {#MyAppName}"; Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Stop-MediaRec.ps1"""; \
-  WorkingDir: "{app}"; IconFilename: "{app}\assets\icons\app-icon.ico"; \
-  Comment: "Stop the Media Recommendation Engine"
+; Primary: open the local app URL (no terminal)
+Name: "{group}\{#MyAppName}"; Filename: "{app}\Open-MediaRec.url"; \
+  IconFilename: "{app}\assets\icons\app-icon.ico"; Comment: "Open {#MyAppName}"
+Name: "{group}\Stop Services"; Filename: "{app}\Stop-MediaRecServices.vbs"; \
+  IconFilename: "{app}\assets\icons\app-icon.ico"; Comment: "Stop {#MyAppName} services"
+Name: "{group}\Collect Diagnostics"; Filename: "{app}\Collect-Diagnostics.vbs"; \
+  IconFilename: "{app}\assets\icons\app-icon.ico"; Comment: "Collect a support diagnostics bundle"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Start-MediaRec.ps1"""; \
-  WorkingDir: "{app}"; IconFilename: "{app}\assets\icons\app-icon.ico"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Open-MediaRec.url"; \
+  IconFilename: "{app}\assets\icons\app-icon.ico"; Tasks: desktopicon
 
 [Run]
+; First-time / upgrade bootstrap: secrets, DB, Redis, WinSW install+start (hidden)
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\setup-env.ps1"""; \
-  StatusMsg: "Generating secure configuration..."; Flags: runhidden waituntilterminated
-Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Start-MediaRec.ps1"""; \
-  Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; \
-  Flags: postinstall nowait skipifsilent
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\scripts\Initialize-NativeInstall.ps1"" -InstallRoot ""{app}"" -DataRoot ""{commonappdata}\MediaRecommendationEngine"" -Quiet"; \
+  StatusMsg: "Configuring services and database..."; Flags: runhidden waituntilterminated
+; Open the app (no console)
+Filename: "{app}\Open-MediaRec.url"; \
+  Description: "Open {#MyAppName}"; Flags: postinstall shellexec skipifsilent nowait
 
 [UninstallRun]
-; Best-effort stop of running containers before files are removed.
+; Best-effort stop + unregister services before files are removed.
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Stop-MediaRec.ps1"""; \
-  WorkingDir: "{app}"; Flags: runhidden; RunOnceId: "StopStack"
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\scripts\Install-MediaRecServices.ps1"" -Action uninstall -InstallRoot ""{app}"""; \
+  Flags: runhidden; RunOnceId: "UninstallServices"
 
 [Code]
-function InitializeSetup(): Boolean;
 var
-  ResultCode: Integer;
+  GRemoveProgramData: Boolean;
+
+function InitializeSetup(): Boolean;
 begin
+  { Native installer does not require Docker, WSL, or host Python. }
   Result := True;
-  // Warn (do not block) if Docker is not detectable - it's a hard runtime dependency.
-  if not Exec('cmd.exe', '/c where docker', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  DataRoot: String;
+begin
+  GRemoveProgramData := False;
+  DataRoot := ExpandConstant('{commonappdata}\MediaRecommendationEngine');
+  if DirExists(DataRoot) then
   begin
-    if MsgBox('Docker was not found on this machine.' + #13#10 + #13#10 +
-              'This application runs on Docker Desktop, which must be installed and running to use it.' + #13#10 + #13#10 +
-              'Continue with installation anyway?', mbConfirmation, MB_YESNO) = IDNO then
-      Result := False;
+    if MsgBox(
+      'Also remove application data (database, Redis, and settings)?'#13#10#13#10 +
+      DataRoot + #13#10#13#10 +
+      'Choose No to keep your data for a future reinstall.',
+      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      GRemoveProgramData := True;
+  end;
+  Result := True;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if (CurUninstallStep = usPostUninstall) and GRemoveProgramData then
+  begin
+    DelTree(ExpandConstant('{commonappdata}\MediaRecommendationEngine'), True, True, True);
   end;
 end;

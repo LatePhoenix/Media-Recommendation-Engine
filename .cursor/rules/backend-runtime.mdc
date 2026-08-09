@@ -1,0 +1,26 @@
+---
+description: Rules for making the Python backend and workers packaging-safe
+globs:
+  - apps/api/**
+  - workers/**
+  - packages/**
+alwaysApply: false
+---
+
+# Backend runtime rules
+
+- Native packaging must not depend on developer shell activation or ad hoc PYTHONPATH setup.
+- Prefer explicit launcher entrypoints over hidden cwd assumptions.
+- Config loading must work in packaged runtime paths.
+- Database migrations and seed logic must be callable from packaged install scripts.
+- Keep API and worker runtime startup deterministic and scriptable.
+- Avoid code changes that only work inside Docker networking assumptions.
+- If environment variables or path assumptions are discovered, document them in `docs/packaging/runtime-assumptions.md`.
+
+# Verification
+
+- For backend changes, provide:
+  - startup command for packaged runtime
+  - migration command
+  - worker start command
+  - health check command or URL

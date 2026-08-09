@@ -1,26 +1,13 @@
 from __future__ import annotations
 
-import sys
 from logging.config import fileConfig
-from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-_HERE = Path(__file__).resolve()
-API_ROOT = _HERE.parents[1]
-# Monorepo checkout: <repo>/apps/api/alembic/env.py → parents[3] is repo root.
-# Container image: /app/alembic/env.py → packages live at /packages (see Dockerfile).
-if len(_HERE.parents) > 3 and (_HERE.parents[3] / "packages").is_dir():
-    ROOT = _HERE.parents[3]
-elif Path("/packages").is_dir():
-    ROOT = Path("/")
-else:
-    ROOT = API_ROOT
-for path in (ROOT, ROOT / "packages", API_ROOT):
-    s = str(path)
-    if s not in sys.path:
-        sys.path.insert(0, s)
+from app.paths import ensure_sys_path
+
+ensure_sys_path()
 
 from app.config import get_settings  # noqa: E402
 from app.db import Base  # noqa: E402

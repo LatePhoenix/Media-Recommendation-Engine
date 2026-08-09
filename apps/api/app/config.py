@@ -5,13 +5,17 @@ from functools import lru_cache
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.paths import resolve_env_files
+
 # Known-insecure placeholder shipped in .env.example — must never be used at runtime.
 INSECURE_SECRET_KEY_DEFAULT = "change-me-in-production-use-long-random-string"
 MIN_SECRET_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # env_file is applied in get_settings() via resolve_env_files() so native installs
+    # can load %PROGRAMDATA%\…\config\.env without depending on process cwd.
+    model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "postgresql+psycopg://mediarec:mediarec@localhost:5432/mediarec"
     redis_url: str = "redis://localhost:6379/0"
@@ -47,6 +51,9 @@ class Settings(BaseSettings):
     registration_enabled: bool = True
     # When true, rate-limiter backend errors allow the request; default fail-closed (503).
     rate_limit_fail_open: bool = False
+    # Native packaging: directory with Vite ``dist`` (index.html). Empty = API-only
+    # (Docker nginx / Vite dev still serve the UI separately). See docs/packaging/adr-serve-web.md.
+    web_dist_dir: str = ""
 
     @field_validator("api_secret_key")
     @classmethod
@@ -67,4 +74,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    env_files = resolve_env_files()
+    if env_files:
+        return Settings(_env_file=env_files)
+    # No dotenv on disk: rely on process environment only (CI, some containers).
+    return Settings(_env_file=None)

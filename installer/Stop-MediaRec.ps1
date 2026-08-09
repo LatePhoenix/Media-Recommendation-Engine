@@ -1,3 +1,5 @@
+# DEPRECATED for Windows product installs — native Setup.exe + WinSW replaced this.
+# Kept only as a local Compose convenience if you still use Docker Desktop for development.
 # Stop-MediaRec.ps1
 # Stops the full stack via Docker Compose (mirrors Start-MediaRec.ps1 root discovery).
 

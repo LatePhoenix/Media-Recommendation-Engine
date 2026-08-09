@@ -1,0 +1,28 @@
+<!--
+  WinSW: mediarec-redis
+  Docs: docs/packaging/redis-distribution.md , docs/packaging/windows-services.md
+
+  At install time:
+  - Copy WinSW-x64.exe -> runtime/winsw/mediarec-redis.exe (beside this XML)
+  - Replace __PROGRAMDATA__ with ProgramData\MediaRecommendationEngine
+  - Ensure __PROGRAMDATA__\redis\redis.conf exists (Initialize-MediaRecRedis.ps1)
+-->
+<service>
+  <id>mediarec-redis</id>
+  <name>Media Recommendation Engine Redis</name>
+  <description>Local Redis for Media Recommendation Engine job queues (RQ).</description>
+  <executable>%BASE%\..\redis\redis-server.exe</executable>
+  <arguments>redis.conf</arguments>
+  <workingdirectory>__PROGRAMDATA__\redis</workingdirectory>
+  <logpath>__PROGRAMDATA__\logs\mediarec-redis</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="10 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>false</delayedAutoStart>
+  <stoptimeout>15 sec</stoptimeout>
+</service>

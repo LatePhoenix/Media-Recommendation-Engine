@@ -1,0 +1,29 @@
+<!--
+  WinSW: mediarec-postgres
+  Docs: docs/packaging/windows-services.md
+
+  Install-time substitutions:
+    __PROGRAMDATA__  -> e.g. C:\ProgramData\MediaRecommendationEngine
+  Place mediarec-postgres.exe (WinSW-x64 copy) beside this XML under runtime\winsw\.
+  Cluster must already exist (Initialize-MediaRecDatabase.ps1).
+-->
+<service>
+  <id>mediarec-postgres</id>
+  <name>Media Recommendation Engine PostgreSQL</name>
+  <description>Bundled PostgreSQL 16 for Media Recommendation Engine.</description>
+  <executable>%BASE%\..\postgres\bin\postgres.exe</executable>
+  <arguments>-D "__PROGRAMDATA__\postgres\data"</arguments>
+  <workingdirectory>%BASE%\..\postgres\bin</workingdirectory>
+  <logpath>__PROGRAMDATA__\logs\mediarec-postgres</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="reboot" delay="1 min"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>false</delayedAutoStart>
+  <stoptimeout>30 sec</stoptimeout>
+</service>

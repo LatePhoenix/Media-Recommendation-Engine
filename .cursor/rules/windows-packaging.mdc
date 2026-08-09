@@ -1,0 +1,34 @@
+---
+description: Rules for Windows installer, services, runtime packaging, and release pipeline
+globs:
+  - installer/**
+  - scripts/**
+  - .github/workflows/**
+  - docs/packaging/**
+alwaysApply: false
+---
+
+# Windows packaging rules
+
+- Goal: Windows installs run **natively** (no Docker Desktop runtime).
+- Keep Inno Setup as the top-level installer unless a blocking technical issue is proven.
+- Prefer WinSW for Windows service management.
+- Binaries belong in Program Files; mutable state belongs in ProgramData.
+- Do not design a runtime that writes application state into the install directory.
+- Do not require host Python, Docker, or WSL for installed-app execution.
+- Use pinned versions for PostgreSQL, pgvector, Redis, Python, and WinSW.
+- Every external binary source must be documented with version, URL, license notes, and update strategy.
+- Any install-time script must be idempotent.
+- Installer changes must support fresh install, upgrade, and uninstall scenarios.
+- `infra/docker-compose.yml` is for developer convenience only — not the shipping Windows product.
+- If a task changes the installer flow, update:
+  - `installer/BUILD.md`
+  - relevant docs in `docs/packaging/**`
+
+# Verification
+
+- Always specify:
+  - how to build the installer
+  - how to test a clean install
+  - how to test service start/stop
+  - how to test upgrade behavior
