@@ -115,8 +115,22 @@ for ($i = 0; $i -lt 60; $i++) {
   } catch { Start-Sleep -Seconds 2 }
 }
 
-if ($ready) {
+# API must be up for login/register; web HTML alone is not enough.
+$ApiHealth = "http://localhost:8000/health"
+Write-Host "Waiting for the API at $ApiHealth ..."
+$apiReady = $false
+for ($i = 0; $i -lt 60; $i++) {
+  try {
+    $resp = Invoke-WebRequest -Uri $ApiHealth -UseBasicParsing -TimeoutSec 3
+    if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) { $apiReady = $true; break }
+  } catch { Start-Sleep -Seconds 2 }
+}
+
+if ($ready -and $apiReady) {
   Write-Host "Ready. Opening $WebUrl" -ForegroundColor Green
+  Start-Process $WebUrl
+} elseif ($ready -and -not $apiReady) {
+  Write-Warning "Web UI responded but the API at $ApiHealth did not. Login/register will fail until the API is healthy."
   Start-Process $WebUrl
 } else {
   Write-Warning "The web UI did not respond yet. It may still be starting - open $WebUrl in your browser shortly."

@@ -81,6 +81,25 @@ function Ensure-Dir([string]$Path) {
   }
 }
 
+function Grant-PostgresLocalServiceAccess {
+  param(
+    [Parameter(Mandatory = $true)][string]$DataDir,
+    [Parameter(Mandatory = $true)][string]$LogDir,
+    [string]$PgRoot = ""
+  )
+  # WinSW mediarec-postgres runs as LocalService (LocalSystem is rejected by Postgres).
+  $acct = "NT AUTHORITY\LOCAL SERVICE"
+  Write-Step "Granting $acct access to Postgres data/logs"
+  & icacls.exe $DataDir /grant "${acct}:(OI)(CI)F" /T /C /Q | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "icacls failed for data dir $DataDir" }
+  Ensure-Dir $LogDir
+  & icacls.exe $LogDir /grant "${acct}:(OI)(CI)M" /T /C /Q | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "icacls failed for log dir $LogDir" }
+  if ($PgRoot -and (Test-Path -LiteralPath $PgRoot)) {
+    & icacls.exe $PgRoot /grant "${acct}:(OI)(CI)RX" /T /C /Q | Out-Null
+  }
+}
+
 function Get-PlainPassword {
   if ($Password) { return $Password }
   if ($env:POSTGRES_PASSWORD) { return $env:POSTGRES_PASSWORD }
@@ -202,6 +221,8 @@ $env:DATABASE_URL = $databaseUrl
 $env:POSTGRES_USER = $DbUser
 $env:POSTGRES_PASSWORD = $plainPw
 $env:POSTGRES_DB = $DbName
+
+Grant-PostgresLocalServiceAccess -DataDir $DataDir -LogDir $LogDir -PgRoot $PgRoot
 
 $python = Join-Path $InstallRoot "runtime\python\python.exe"
 $apiRoot = Join-Path $InstallRoot "app\api"

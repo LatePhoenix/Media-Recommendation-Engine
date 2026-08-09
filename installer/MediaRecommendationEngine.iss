@@ -116,20 +116,22 @@ Source: "services\*.xml"; DestDir: "{app}\services"; Flags: ignoreversion
 Source: "redis\redis.conf.template"; DestDir: "{app}\runtime\redis"; DestName: "redis.conf.template"; Flags: ignoreversion
 
 ; User-facing open / stop / diagnostics (no Docker; no interactive PowerShell Start)
+Source: "Open-MediaRec.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Open-MediaRec.url"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Stop-MediaRecServices.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Collect-Diagnostics.vbs"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#RepoRoot}\scripts\Repair-MediaRecLaunch.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 
 [Icons]
-; Primary: open the local app URL (no terminal)
-Name: "{group}\{#MyAppName}"; Filename: "{app}\Open-MediaRec.url"; \
+; Primary: start services if needed, then open the local app URL
+Name: "{group}\{#MyAppName}"; Filename: "{app}\Open-MediaRec.vbs"; \
   IconFilename: "{app}\assets\icons\app-icon.ico"; Comment: "Open {#MyAppName}"
 Name: "{group}\Stop Services"; Filename: "{app}\Stop-MediaRecServices.vbs"; \
   IconFilename: "{app}\assets\icons\app-icon.ico"; Comment: "Stop {#MyAppName} services"
 Name: "{group}\Collect Diagnostics"; Filename: "{app}\Collect-Diagnostics.vbs"; \
   IconFilename: "{app}\assets\icons\app-icon.ico"; Comment: "Collect a support diagnostics bundle"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Open-MediaRec.url"; \
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Open-MediaRec.vbs"; \
   IconFilename: "{app}\assets\icons\app-icon.ico"; Tasks: desktopicon
 
 [Run]
@@ -137,8 +139,8 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Open-MediaRec.url"; \
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\scripts\Initialize-NativeInstall.ps1"" -InstallRoot ""{app}"" -DataRoot ""{commonappdata}\MediaRecommendationEngine"" -Quiet"; \
   StatusMsg: "Configuring services and database..."; Flags: runhidden waituntilterminated
-; Open the app (no console)
-Filename: "{app}\Open-MediaRec.url"; \
+; Open the app (starts services if needed)
+Filename: "{app}\Open-MediaRec.vbs"; \
   Description: "Open {#MyAppName}"; Flags: postinstall shellexec skipifsilent nowait
 
 [UninstallRun]

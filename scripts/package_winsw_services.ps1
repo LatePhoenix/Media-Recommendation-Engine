@@ -16,7 +16,10 @@ param(
   [string]$OutDir = "",
   [string]$InstallRoot = "",
   [string]$DataRoot = "",
-  [string]$WinSwTag = "v2.12.0"
+  [string]$WinSwTag = "v2.12.0",
+  # Ship installer payloads with unsubstituted tokens; post-install bootstrap
+  # (Initialize-NativeInstall) must re-run this script with real machine paths.
+  [switch]$KeepPlaceholders
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,12 +67,31 @@ function Ensure-Dir([string]$Path) {
   }
 }
 
+function Copy-WinSwBinary {
+  param(
+    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][string]$Destination
+  )
+  $srcFull = [System.IO.Path]::GetFullPath($Source)
+  $dstFull = [System.IO.Path]::GetFullPath($Destination)
+  if ($srcFull -eq $dstFull) { return }
+  try {
+    Copy-Item -LiteralPath $Source -Destination $Destination -Force -ErrorAction Stop
+  } catch {
+    if (Test-Path -LiteralPath $Destination) {
+      Write-Host ("  skip binary copy (in use): " + (Split-Path -Leaf $Destination)) -ForegroundColor Yellow
+      return
+    }
+    throw
+  }
+}
+
 Ensure-Dir $CacheDir
 Ensure-Dir $WinSwRoot
 
-$existingWinsw = Join-Path $WinSwRoot "WinSW-x64.exe"
-if (-not (Test-Path -LiteralPath $WinSwCache) -and (Test-Path -LiteralPath $existingWinsw)) {
-  $WinSwCache = $existingWinsw
+$destWinsw = Join-Path $WinSwRoot "WinSW-x64.exe"
+if (-not (Test-Path -LiteralPath $WinSwCache) -and (Test-Path -LiteralPath $destWinsw)) {
+  $WinSwCache = $destWinsw
 }
 
 if (-not (Test-Path -LiteralPath $WinSwCache)) {
@@ -79,7 +101,8 @@ if (-not (Test-Path -LiteralPath $WinSwCache)) {
   Invoke-WebRequest -Uri $WinSwUrl -OutFile $WinSwCache -UseBasicParsing
 }
 
-Copy-Item -LiteralPath $WinSwCache -Destination (Join-Path $WinSwRoot "WinSW-x64.exe") -Force
+# Installed trees often reuse runtime\winsw\WinSW-x64.exe as the cache source.
+Copy-WinSwBinary -Source $WinSwCache -Destination $destWinsw
 
 foreach ($id in $ServiceIds) {
   $srcXml = Join-Path $ServicesSrc "$id.xml"
@@ -87,17 +110,22 @@ foreach ($id in $ServiceIds) {
     throw "Missing service definition: $srcXml"
   }
   Write-Step "Staging $id"
-  Copy-Item -LiteralPath $WinSwCache -Destination (Join-Path $WinSwRoot "$id.exe") -Force
+  Copy-WinSwBinary -Source $WinSwCache -Destination (Join-Path $WinSwRoot "$id.exe")
   $xml = Get-Content -LiteralPath $srcXml -Raw
-  $xml = $xml.Replace("__INSTALLROOT__", $InstallRoot)
-  $xml = $xml.Replace("__PROGRAMDATA__", $DataRoot)
+  if (-not $KeepPlaceholders) {
+    $xml = $xml.Replace("__INSTALLROOT__", $InstallRoot)
+    $xml = $xml.Replace("__PROGRAMDATA__", $DataRoot)
+  }
   Set-Content -LiteralPath (Join-Path $WinSwRoot "$id.xml") -Value $xml -Encoding utf8
 }
 
+$metaInstall = if ($KeepPlaceholders) { "__INSTALLROOT__" } else { $InstallRoot }
+$metaData = if ($KeepPlaceholders) { "__PROGRAMDATA__" } else { $DataRoot }
 $meta = @"
 winsw_tag=$WinSwTag
-install_root=$InstallRoot
-program_data=$DataRoot
+install_root=$metaInstall
+program_data=$metaData
+keep_placeholders=$($KeepPlaceholders.IsPresent)
 services=$($ServiceIds -join ',')
 built_utc=$((Get-Date).ToUniversalTime().ToString("o"))
 "@

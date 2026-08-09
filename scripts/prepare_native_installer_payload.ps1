@@ -70,11 +70,12 @@ if (-not $SkipRedis) {
   if ($LASTEXITCODE -ne 0) { throw "verify_redis_windows.ps1 failed" }
 }
 
-Write-Step "WinSW service definitions"
+Write-Step "WinSW service definitions (placeholders for installer payload)"
 & powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package_winsw_services.ps1 `
-  -OutDir $OutDir -InstallRoot $OutDir -DataRoot $DataRoot
+  -OutDir $OutDir -KeepPlaceholders
 if ($LASTEXITCODE -ne 0) { throw "package_winsw_services.ps1 failed" }
-& powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_winsw_services.ps1 -OutDir $OutDir
+& powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_winsw_services.ps1 `
+  -OutDir $OutDir -ExpectPlaceholders
 if ($LASTEXITCODE -ne 0) { throw "verify_winsw_services.ps1 failed" }
 
 $required = @(

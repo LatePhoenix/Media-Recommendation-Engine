@@ -10,6 +10,9 @@ What gets installed
 You do not need Docker, WSL, or a separate Python install.
 
 After setup, open the Start Menu shortcut to use the app in your browser
-(http://127.0.0.1:8000/).
+(http://127.0.0.1:8000/). The shortcut starts the Windows services if needed.
+
+Do not run the developer Docker / start.bat stack at the same time as the
+installed app — both use PostgreSQL 5432, Redis 6379, and API port 8000.
 
 Publisher: Singularity Solutions and Services

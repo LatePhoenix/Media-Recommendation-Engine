@@ -28,6 +28,19 @@ function Write-Info([string]$Message) {
   if (-not $Quiet) { Write-Host $Message }
 }
 
+function Write-BootstrapLog([string]$Message) {
+  try {
+    $logDir = Join-Path $DataRoot "logs"
+    if (-not (Test-Path -LiteralPath $logDir)) {
+      New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+    $line = "{0:o} {1}" -f (Get-Date).ToUniversalTime(), $Message
+    Add-Content -LiteralPath (Join-Path $logDir "bootstrap.log") -Value $line -Encoding utf8
+  } catch {
+    # never fail bootstrap solely because logging failed
+  }
+}
+
 if (-not $InstallRoot) {
   $InstallRoot = Join-Path ${env:ProgramFiles} "Media Recommendation Engine"
 }
@@ -52,14 +65,25 @@ function Ensure-Dir([string]$Path) {
 }
 
 function New-UrlSafeToken([int]$bytes) {
+  # Windows PowerShell 5.1 / .NET Framework: RandomNumberGenerator.Fill is unavailable.
   $buf = New-Object byte[] $bytes
-  [System.Security.Cryptography.RandomNumberGenerator]::Fill($buf)
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($buf)
+  } finally {
+    $rng.Dispose()
+  }
   [Convert]::ToBase64String($buf).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 }
 
 function New-FernetKey {
   $buf = New-Object byte[] 32
-  [System.Security.Cryptography.RandomNumberGenerator]::Fill($buf)
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($buf)
+  } finally {
+    $rng.Dispose()
+  }
   [Convert]::ToBase64String($buf).Replace('+', '-').Replace('/', '_')
 }
 
@@ -188,6 +212,9 @@ function Ensure-NativeEnv {
 Write-Info "Native install bootstrap"
 Write-Info "  InstallRoot: $InstallRoot"
 Write-Info "  DataRoot:    $DataRoot"
+Write-BootstrapLog "Bootstrap start InstallRoot=$InstallRoot DataRoot=$DataRoot"
+
+try {
 
 $secrets = Ensure-NativeEnv
 $env:MEDIAREC_ENV_FILE = $secrets.EnvFile
@@ -209,6 +236,26 @@ if (-not (Test-Path -LiteralPath $initDb)) {
 }
 
 Write-Info "Initializing PostgreSQL..."
+Write-BootstrapLog "Initializing PostgreSQL"
+# First-time only: fail fast if Docker/dev Compose already owns the default ports.
+$pgDataMarker = Join-Path $DataRoot "postgres\data\PG_VERSION"
+if (-not (Test-Path -LiteralPath $pgDataMarker)) {
+  foreach ($probe in @(
+    @{ Name = "PostgreSQL"; Port = 5432 },
+    @{ Name = "Redis"; Port = 6379 }
+  )) {
+    try {
+      $tcp = Test-NetConnection -ComputerName 127.0.0.1 -Port $probe.Port -WarningAction SilentlyContinue
+      if ($tcp.TcpTestSucceeded) {
+        $msg = "$($probe.Name) port $($probe.Port) is already in use on 127.0.0.1. Stop Docker Compose / start.bat stack (or other local DB/Redis) before finishing the native Windows install, then open the app again from the Start Menu."
+        Write-BootstrapLog $msg
+        throw $msg
+      }
+    } catch {
+      if ($_.Exception.Message -match "already in use") { throw }
+    }
+  }
+}
 & powershell -NoProfile -ExecutionPolicy Bypass -File $initDb `
   -InstallRoot $InstallRoot -DataRoot $DataRoot `
   -Password $env:POSTGRES_PASSWORD -Port 5432
@@ -222,28 +269,40 @@ if ((Test-Path $pgCtl) -and (Test-Path (Join-Path $pgData "postmaster.pid"))) {
 }
 
 Write-Info "Initializing Redis config..."
+Write-BootstrapLog "Initializing Redis"
 & powershell -NoProfile -ExecutionPolicy Bypass -File $initRedis `
   -InstallRoot $InstallRoot -DataRoot $DataRoot `
   -Password $env:REDIS_PASSWORD -Port 6379
 if ($LASTEXITCODE -ne 0) { throw "Redis init failed" }
 
+# Running services lock runtime\winsw\mediarec-*.exe; stop before re-staging XMLs/binaries.
+if ((Test-Path -LiteralPath $svcMgr) -and -not $SkipServices) {
+  Write-Info "Stopping Windows services (if present) before WinSW staging..."
+  Write-BootstrapLog "Stopping services before WinSW staging"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $svcMgr -Action stop -InstallRoot $InstallRoot
+}
+
 Write-Info "Staging WinSW service definitions..."
+Write-BootstrapLog "Staging WinSW"
 & powershell -NoProfile -ExecutionPolicy Bypass -File $pkgWinsw `
   -OutDir $InstallRoot -InstallRoot $InstallRoot -DataRoot $DataRoot
 if ($LASTEXITCODE -ne 0) { throw "WinSW staging failed" }
 
 if (-not $SkipServices) {
   Write-Info "Installing Windows services..."
+  Write-BootstrapLog "Installing services"
   & powershell -NoProfile -ExecutionPolicy Bypass -File $svcMgr -Action install -InstallRoot $InstallRoot
   if ($LASTEXITCODE -ne 0) { throw "Service install failed" }
   if (-not $SkipStart) {
     Write-Info "Starting Windows services..."
+    Write-BootstrapLog "Starting services"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $svcMgr -Action start -InstallRoot $InstallRoot
     if ($LASTEXITCODE -ne 0) { throw "Service start failed" }
   }
 }
 
 Write-Info "Bootstrap complete. App URL: http://127.0.0.1:8000/"
+Write-BootstrapLog "Bootstrap complete"
 
 # Record install/upgrade state (ProgramData — survives Program Files replacement).
 $verFile = Join-Path $InstallRoot "version.txt"
@@ -264,3 +323,9 @@ $state = [ordered]@{
 }
 ($state | ConvertTo-Json) | Set-Content -LiteralPath $statePath -Encoding utf8
 Write-Info "Wrote $statePath"
+Write-BootstrapLog "Wrote install-state.json"
+
+} catch {
+  Write-BootstrapLog ("Bootstrap FAILED: " + $_.Exception.Message)
+  throw
+}
