@@ -1,0 +1,32 @@
+---
+description: Project-wide context for Media Recommendation Engine
+alwaysApply: true
+---
+
+# Project overview
+
+- This is a local-first media recommendation application.
+- Current stack:
+  - `apps/web`: React + Vite + TypeScript
+  - `apps/api`: FastAPI + SQLAlchemy + Alembic
+  - `workers/**`: importers and recommender jobs
+  - `packages/**`: shared schema and enrichment abstractions
+  - `installer/**`: native Windows installer (Inno + WinSW; no Docker runtime)
+  - `infra/**`: optional Docker Compose for developer workflows
+  - `docs/packaging/**`: native packaging ADRs and runbooks
+- Recommendation logic must remain deterministic; LLM/Ollama enrichment is optional and non-authoritative.
+- Preserve the existing developer Compose workflow unless there is a strong reason to change it.
+- Windows end-user distribution is native-only (bundled Python / Postgres / Redis / services).
+- Reference canonical files instead of inventing structure:
+  - `README.md`
+  - `docs/packaging/README.md`
+  - `installer/MediaRecommendationEngine.iss`
+  - `installer/BUILD.md`
+  - `infra/docker-compose.yml` (dev only)
+
+# Required behavior
+
+- Before coding, read the relevant existing files and summarize assumptions.
+- When changing packaging architecture, write or update docs in `docs/packaging/**`.
+- Prefer small, reviewable commits and phase-based changes.
+- After each meaningful change, provide verification steps and expected outcomes.

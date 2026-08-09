@@ -1,4 +1,9 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// Empty string = same-origin (native FastAPI static UI). `||` would break that.
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL !== undefined
+    ? import.meta.env.VITE_API_BASE_URL
+    : "http://localhost:8000";
+
 
 export type MediaType = "movie" | "tv" | "book" | "audiobook" | "comic" | "game";
 

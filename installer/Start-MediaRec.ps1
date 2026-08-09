@@ -1,3 +1,5 @@
+# DEPRECATED for Windows product installs — native Setup.exe + WinSW replaced this.
+# Kept only as a local Compose convenience if you still use Docker Desktop for development.
 # Start-MediaRec.ps1
 # Launches the full stack via Docker Compose, waits for the web UI, opens it.
 # Uses the base compose file only (image contents, no host bind mounts) so

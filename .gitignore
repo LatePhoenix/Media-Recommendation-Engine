@@ -8,6 +8,7 @@ venv/
 .mypy_cache/
 .ruff_cache/
 dist/
+installer/output/
 *.egg
 
 # Node
@@ -26,6 +27,9 @@ apps/web/dist/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Local agent settings (do not commit secrets)
+.claude/settings.local.json
 
 # Data
 data/

@@ -1,0 +1,32 @@
+<!--
+  WinSW: mediarec-worker
+  Docs: docs/packaging/windows-services.md
+
+  Single RQ worker process listening on imports + recommender queues.
+  Substitutions: __PROGRAMDATA__, __INSTALLROOT__
+-->
+<service>
+  <id>mediarec-worker</id>
+  <name>Media Recommendation Engine Worker</name>
+  <description>RQ worker (imports + recommender) for Media Recommendation Engine.</description>
+  <executable>%BASE%\..\python\python.exe</executable>
+  <arguments>-m app.launch worker --queues imports recommender</arguments>
+  <workingdirectory>__INSTALLROOT__\app\api</workingdirectory>
+  <env name="MEDIAREC_ROOT" value="__INSTALLROOT__"/>
+  <env name="MEDIAREC_ENV_FILE" value="__PROGRAMDATA__\config\.env"/>
+  <env name="MEDIAREC_WAIT_DEPS_SECONDS" value="120"/>
+  <env name="ENRICHMENT_ENABLED" value="false"/>
+  <depend>mediarec-postgres</depend>
+  <depend>mediarec-redis</depend>
+  <logpath>__PROGRAMDATA__\logs\mediarec-worker</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="15 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <stoptimeout>25 sec</stoptimeout>
+</service>

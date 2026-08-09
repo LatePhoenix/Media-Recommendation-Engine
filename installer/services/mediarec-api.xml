@@ -1,0 +1,35 @@
+<!--
+  WinSW: mediarec-api
+  Docs: docs/packaging/windows-services.md
+
+  Substitutions: __PROGRAMDATA__, __INSTALLROOT__
+  Depends on mediarec-postgres + mediarec-redis (Windows SCM ordering).
+  Process also waits for DB/Redis readiness (app.launch).
+-->
+<service>
+  <id>mediarec-api</id>
+  <name>Media Recommendation Engine API</name>
+  <description>FastAPI / uvicorn for Media Recommendation Engine (API + optional static UI).</description>
+  <executable>%BASE%\..\python\python.exe</executable>
+  <arguments>-m app.launch api</arguments>
+  <workingdirectory>__INSTALLROOT__\app\api</workingdirectory>
+  <env name="MEDIAREC_ROOT" value="__INSTALLROOT__"/>
+  <env name="MEDIAREC_ENV_FILE" value="__PROGRAMDATA__\config\.env"/>
+  <env name="WEB_DIST_DIR" value="__INSTALLROOT__\app\web"/>
+  <env name="MEDIAREC_API_HOST" value="127.0.0.1"/>
+  <env name="MEDIAREC_API_PORT" value="8000"/>
+  <env name="MEDIAREC_WAIT_DEPS_SECONDS" value="120"/>
+  <depend>mediarec-postgres</depend>
+  <depend>mediarec-redis</depend>
+  <logpath>__PROGRAMDATA__\logs\mediarec-api</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="15 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <stoptimeout>20 sec</stoptimeout>
+</service>

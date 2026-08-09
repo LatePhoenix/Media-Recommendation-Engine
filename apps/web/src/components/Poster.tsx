@@ -1,6 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL !== undefined
+    ? import.meta.env.VITE_API_BASE_URL
+    : "http://localhost:8000";
+
 
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem("token");

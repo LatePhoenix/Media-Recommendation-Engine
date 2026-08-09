@@ -1,25 +1,12 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-_HERE = Path(__file__).resolve()
-# Monorepo: <repo>/apps/api/app/main.py → parents[3] is repo root.
-# Container: /app/app/main.py → packages mounted/copied at /packages.
-if len(_HERE.parents) > 3 and (_HERE.parents[3] / "packages").is_dir():
-    ROOT = _HERE.parents[3]
-elif Path("/packages").is_dir():
-    ROOT = Path("/")
-else:
-    ROOT = _HERE.parents[1]
-for path in (ROOT, ROOT / "packages"):
-    s = str(path)
-    if s not in sys.path:
-        sys.path.insert(0, s)
+from app.paths import ensure_sys_path
+
+ensure_sys_path()
 
 from app.config import get_settings
 from app.routers import admin, auth, catalog, domain, imports, interactions, onboarding, recommendations
@@ -114,3 +101,9 @@ def ready() -> dict:
     if not ok:
         return JSONResponse(status_code=503, content=body)
     return body
+
+
+# Native packaging: serve Vite dist when WEB_DIST_DIR is set (after API routes).
+from app.static_ui import mount_web_ui  # noqa: E402
+
+mount_web_ui(app, settings.web_dist_dir)
