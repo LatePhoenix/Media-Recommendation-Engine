@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -21,6 +21,13 @@ def get_anchors(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Item]:
+    # Gate opt-in domains (books/comics) the same way the per-domain routes do, so a user
+    # can't enumerate anchors for a media type they haven't enabled.
+    if media_type.value not in (user.enabled_media_types or []):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Domain {media_type.value!r} is not enabled",
+        )
     rated_ids = {
         r.item_id
         for r in db.query(UserInteraction)

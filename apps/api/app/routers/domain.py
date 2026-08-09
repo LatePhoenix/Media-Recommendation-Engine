@@ -14,9 +14,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_admin
+from app.config import get_settings
 from app.db import get_db
 from app.domains import enabled_domain
 from app.models import ItemState, MediaType, User
+from app.rate_limit import UserRateLimiter
 from app.recommender import FEED_TITLES
 from app.models import ExternalId
 from app.schemas import (
@@ -60,6 +62,9 @@ def _link_out(link: ExternalId) -> ExternalLinkOut:
 
 router = APIRouter(prefix="/api/{domain}", tags=["domain"])
 
+# Feed generation is expensive; throttle regeneration per authenticated user.
+_feed_limiter = UserRateLimiter("feed", get_settings().feed_rate_limit_per_minute, 60)
+
 
 # --- Recommendations (single-domain) ---
 
@@ -69,7 +74,7 @@ def domain_feeds(media_type: MediaType = Depends(enabled_domain)) -> list[dict]:
     return [{"feed_key": k, "title": v} for k, v in FEED_TITLES.items()]
 
 
-@router.get("/recommendations/feeds/{feed_key}")
+@router.get("/recommendations/feeds/{feed_key}", dependencies=[Depends(_feed_limiter)])
 def domain_feed(
     feed_key: str,
     limit: int = Query(20, ge=1, le=100),

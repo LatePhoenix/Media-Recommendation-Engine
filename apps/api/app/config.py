@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     login_rate_limit_per_minute: int = 10          # per client IP
     login_rate_limit_per_username_per_minute: int = 5
     register_rate_limit_per_hour: int = 20         # per client IP
+    # Feed generation is expensive (candidate retrieval + scoring + event writes), so
+    # cap how often a single authenticated user can regenerate a feed.
+    feed_rate_limit_per_minute: int = 30           # per authenticated user
+    # RecommendationEvent rows are written on every feed generation. Prune rows for a
+    # (user, feed) older than this on each generation so the table can't grow unbounded.
+    # Keep generous: offline metrics are computed from these rows. 0 disables pruning.
+    recommendation_event_retention_days: int = 90
     # Only honor X-Forwarded-For when the app runs behind a trusted proxy that sets it;
     # otherwise clients could spoof the header to evade per-IP limits.
     trust_proxy_headers: bool = False

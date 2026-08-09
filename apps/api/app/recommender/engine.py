@@ -702,6 +702,20 @@ def generate_feed(
                 explanation=explanation,
             )
         )
+
+    # Bound RecommendationEvent growth: every generation writes up to `limit` rows, so
+    # prune this (user, feed)'s rows older than the retention window. Scoped to the feed
+    # being generated (cheap; a feed only accrues rows when it is regenerated). The rows
+    # just added carry served_at=now and are always newer than the cutoff.
+    retention_days = settings.recommendation_event_retention_days
+    if retention_days > 0:
+        cutoff = now - timedelta(days=retention_days)
+        db.query(RecommendationEvent).filter(
+            RecommendationEvent.user_id == user.id,
+            RecommendationEvent.feed_key == scoped_feed_key,
+            RecommendationEvent.served_at < cutoff,
+        ).delete(synchronize_session=False)
+
     db.commit()
     return RecommendationFeedOut(
         feed_key=feed_key,

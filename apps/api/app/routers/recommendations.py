@@ -15,11 +15,16 @@ from app.models import (
     User,
     UserInteraction,
 )
+from app.config import get_settings
+from app.rate_limit import UserRateLimiter
 from app.recommender import FEED_TITLES
 from app.schemas import RecommendationAction, RecommendationFeedOut
 from app.services.recommendation import RecommendationService
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
+
+# Feed generation is expensive; throttle regeneration per authenticated user.
+_feed_limiter = UserRateLimiter("feed", get_settings().feed_rate_limit_per_minute, 60)
 
 
 @router.get("/feeds", response_model=list[dict])
@@ -27,7 +32,11 @@ def list_feeds(_: User = Depends(get_current_user)) -> list[dict]:
     return [{"feed_key": k, "title": v} for k, v in FEED_TITLES.items()]
 
 
-@router.get("/feeds/{feed_key}", response_model=RecommendationFeedOut)
+@router.get(
+    "/feeds/{feed_key}",
+    response_model=RecommendationFeedOut,
+    dependencies=[Depends(_feed_limiter)],
+)
 def get_feed(
     feed_key: str,
     limit: int = 20,

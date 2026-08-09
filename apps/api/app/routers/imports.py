@@ -21,6 +21,22 @@ from workers.importers.secure_http import pinned_async_client
 
 router = APIRouter(prefix="/api/imports", tags=["imports"])
 
+# Raster image types the artwork proxy will echo back verbatim. Anything else — HTML, or
+# image/svg+xml (which can embed <script>) — is served as an opaque download instead, so a
+# hostile or compromised import source can't get active content rendered same-origin.
+_SAFE_ARTWORK_CONTENT_TYPES = frozenset(
+    {
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/avif",
+        "image/bmp",
+        "image/tiff",
+        "image/x-icon",
+    }
+)
+
 
 @router.get("/sources", response_model=list[ImportSourceOut])
 def list_sources(
@@ -101,11 +117,18 @@ async def fetch_artwork(
     except (UnsafeUrlError, httpx.HTTPError) as exc:
         raise HTTPException(status_code=502, detail="Could not fetch artwork") from exc
 
-    content_type = resp.headers.get("content-type", "application/octet-stream")
+    # Trust only a known raster image type; strip params (e.g. "; charset=") first.
+    content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+    if content_type not in _SAFE_ARTWORK_CONTENT_TYPES:
+        content_type = "application/octet-stream"
     return Response(
         content=resp.content,
         media_type=content_type,
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            # Defense in depth alongside the global nosniff middleware.
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

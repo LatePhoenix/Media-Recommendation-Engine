@@ -9,6 +9,7 @@ from app.auth import get_current_user
 from app.db import get_db
 from app.models import Item, MediaType, User
 from app.schemas import ItemOut
+from app.services.catalog import escape_like
 
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 
@@ -29,8 +30,7 @@ def list_items(
     if anchors_only:
         query = query.filter(Item.is_anchor.is_(True))
     if q:
-        like = f"%{q}%"
-        query = query.filter(Item.title.ilike(like))
+        query = query.filter(Item.title.ilike(f"%{escape_like(q)}%", escape="\\"))
     return query.order_by(Item.popularity.desc()).offset(offset).limit(limit).all()
 
 
