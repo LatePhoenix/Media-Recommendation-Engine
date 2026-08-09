@@ -87,7 +87,8 @@ class AudiobookshelfConnector:
                     media_type = "audiobook" if (lib.media_hint or "audiobook") == "audiobook" else "book"
                     cover = None
                     if raw.get("id"):
-                        cover = f"{self.base_url}/api/items/{raw['id']}/cover"
+                        # Relative path — browsers fetch via authenticated artwork proxy.
+                        cover = f"/api/items/{raw['id']}/cover"
                     items.append(
                         NormalizedItem(
                             external_id=str(raw.get("id")),

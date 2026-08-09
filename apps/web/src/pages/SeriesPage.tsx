@@ -4,14 +4,28 @@ import { api, ItemState, Series, SeriesDetail } from "../api";
 import { DOMAIN_LABEL } from "../domains";
 import { useDomain } from "../useDomain";
 import MediaCard from "../components/MediaCard";
+import DomainSubnav from "../components/DomainSubnav";
 
 export default function SeriesPage() {
   const domain = useDomain();
   const { seriesId } = useParams<{ seriesId?: string }>();
   const [list, setList] = useState<Series[]>([]);
   const [detail, setDetail] = useState<SeriesDetail | null>(null);
+  const [states, setStates] = useState<Record<string, ItemState>>({});
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const hydrateStates = useCallback(async (slug: string) => {
+    try {
+      const saved = await api.listSaved(slug, { limit: 200 });
+      const map: Record<string, ItemState> = {};
+      for (const row of saved) map[row.item.id] = row.state;
+      setStates(map);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!domain) return;
@@ -20,6 +34,7 @@ export default function SeriesPage() {
     try {
       if (seriesId) {
         setDetail(await api.series(domain.slug, seriesId));
+        await hydrateStates(domain.slug);
       } else {
         setList(await api.listSeries(domain.slug));
         setDetail(null);
@@ -29,7 +44,7 @@ export default function SeriesPage() {
     } finally {
       setBusy(false);
     }
-  }, [domain, seriesId]);
+  }, [domain, seriesId, hydrateStates]);
 
   useEffect(() => {
     load();
@@ -39,18 +54,38 @@ export default function SeriesPage() {
 
   async function setState(itemId: string, state: ItemState, notes?: string) {
     if (!domain) return;
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.setState(domain.slug, itemId, { state, notes });
+      setStates((s) => ({ ...s, [itemId]: state }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save state");
+    } finally {
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
   async function clearState(itemId: string) {
     if (!domain) return;
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.clearState(domain.slug, itemId);
+      setStates((s) => {
+        const next = { ...s };
+        delete next[itemId];
+        return next;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not clear state");
+    } finally {
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
 
@@ -60,19 +95,24 @@ export default function SeriesPage() {
         <h2>
           {DOMAIN_LABEL[domain.mediaType]} · {detail ? detail.name : "Series & franchises"}
         </h2>
+        <DomainSubnav slug={domain.slug} />
         <p className="lead">
-          <Link to={`/${domain.slug}`}>Feeds</Link> · <Link to={`/${domain.slug}/browse`}>Browse</Link>
-          {detail && (
+          {detail ? (
             <>
-              {" "}
-              · <Link to={`/${domain.slug}/series`}>All series</Link>
+              <Link to={`/${domain.slug}/series`}>All series</Link>
+              {detail.franchise ? <span className="muted"> — franchise: {detail.franchise}</span> : null}
             </>
+          ) : (
+            "Canonical series and franchises for this domain."
           )}
-          {detail?.franchise ? <span className="muted"> — franchise: {detail.franchise}</span> : null}
         </p>
       </section>
 
-      {error && <section className="panel"><p className="error">{error}</p></section>}
+      {error && (
+        <section className="panel">
+          <p className="error">{error}</p>
+        </section>
+      )}
 
       {!detail ? (
         <section className="panel">
@@ -98,7 +138,8 @@ export default function SeriesPage() {
                 item={item}
                 mediaType={domain.mediaType}
                 domainSlug={domain.slug}
-                busy={busy}
+                currentState={states[item.id] ?? null}
+                busy={Boolean(busyIds[item.id])}
                 onSetState={setState}
                 onClearState={clearState}
               />

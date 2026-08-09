@@ -112,7 +112,7 @@ python -m pytest app/tests -q
 ```
 apps/web/                 React UI
 apps/api/                 FastAPI + recommender
-workers/importers/        Jellyfin, Plex, Audiobookshelf, Komga stub, CSV
+workers/importers/        Jellyfin, Plex, Audiobookshelf, Trakt, TMDB harvest, Komga stub, CSV
 workers/recommender/      Nightly / online jobs
 packages/shared-schema/   Shared enums / OpenAPI types
 packages/enrichment/      EnrichmentPort + NoOp / Ollama stubs

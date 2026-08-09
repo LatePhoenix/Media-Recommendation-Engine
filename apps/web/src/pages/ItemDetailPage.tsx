@@ -75,7 +75,8 @@ export default function ItemDetailPage() {
       <section className="panel">
         <p className="lead" style={{ marginBottom: 0 }}>
           <Link to={`/${domain.slug}`}>← {DOMAIN_LABEL[domain.mediaType]}</Link> ·{" "}
-          <Link to={`/${domain.slug}/browse`}>Browse</Link>
+          <Link to={`/${domain.slug}/browse`}>Browse</Link> ·{" "}
+          <Link to={`/${domain.slug}/saved`}>My List</Link>
         </p>
       </section>
 
@@ -111,7 +112,7 @@ export default function ItemDetailPage() {
               {item.description ? <p className="detail-desc">{item.description}</p> : null}
 
               <div className="detail-section">
-                <p className="detail-section-title">Your list</p>
+                <p className="detail-section-title">My List</p>
                 <div className="state-row">
                   {stateOptions(domain).map((opt) => (
                     <button

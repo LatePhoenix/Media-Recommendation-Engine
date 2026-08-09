@@ -321,7 +321,7 @@ class AdminModelConfigIn(BaseModel):
 
 
 class ImportSourceCreate(BaseModel):
-    source: Literal["jellyfin", "plex", "audiobookshelf", "komga", "trakt"]
+    source: Literal["jellyfin", "plex", "audiobookshelf", "komga", "trakt", "tmdb"]
     display_name: str
     base_url: str | None = None
     credentials: dict[str, Any] = Field(default_factory=dict)

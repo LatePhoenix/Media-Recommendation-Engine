@@ -111,7 +111,8 @@ class JellyfinConnector:
                 item_id = raw.get("Id")
                 cover = None
                 if item_id:
-                    cover = f"{self.base_url}/Items/{item_id}/Images/Primary"
+                    # Relative path — browsers fetch via authenticated artwork proxy.
+                    cover = f"/Items/{item_id}/Images/Primary"
                 items.append(
                     NormalizedItem(
                         external_id=str(item_id),

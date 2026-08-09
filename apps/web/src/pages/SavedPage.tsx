@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, ItemState, SavedItem, SavedSort } from "../api";
 import { DOMAIN_LABEL, IN_PROGRESS_LABEL } from "../domains";
 import { useDomain } from "../useDomain";
 import MediaCard from "../components/MediaCard";
+import DomainSubnav from "../components/DomainSubnav";
 import { CardSkeletons, EmptyState } from "../components/Poster";
 
 const SORTS: { value: SavedSort; label: string }[] = [
@@ -18,6 +18,7 @@ export default function SavedPage() {
   const [filter, setFilter] = useState<ItemState | "all">("all");
   const [sort, setSort] = useState<SavedSort>("recently_added");
   const [rows, setRows] = useState<SavedItem[]>([]);
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -40,7 +41,7 @@ export default function SavedPage() {
       const opts = filter === "all" ? { sort } : { state: [filter], sort };
       setRows(await api.listSaved(domain.slug, opts));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load saved items");
+      setError(e instanceof Error ? e.message : "Failed to load My List");
     } finally {
       setBusy(false);
     }
@@ -54,37 +55,46 @@ export default function SavedPage() {
 
   async function setState(itemId: string, state: ItemState, notes?: string) {
     if (!domain) return;
-    setBusy(true);
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.setState(domain.slug, itemId, { state, notes });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update state");
     } finally {
-      setBusy(false);
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
 
   async function clearState(itemId: string) {
     if (!domain) return;
-    setBusy(true);
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.clearState(domain.slug, itemId);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not remove");
     } finally {
-      setBusy(false);
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
 
   return (
     <div>
       <section className="panel feed-hero">
-        <h2>{DOMAIN_LABEL[domain.mediaType]} · Saved</h2>
+        <h2>{DOMAIN_LABEL[domain.mediaType]} · My List</h2>
+        <DomainSubnav slug={domain.slug} />
         <p className="lead">
-          Your durable interest list for this domain. <Link to={`/${domain.slug}`}>Feeds</Link> ·{" "}
-          <Link to={`/${domain.slug}/browse`}>Browse</Link> · <Link to={`/${domain.slug}/series`}>Series</Link>
+          Your durable interest list for this domain — Interested, Shortlist, in progress, completed, and
+          passes.
         </p>
         <div className="tabs">
           {stateTabs.map((t) => (
@@ -110,13 +120,17 @@ export default function SavedPage() {
         </div>
       </section>
 
-      {error && <section className="panel"><p className="error">{error}</p></section>}
+      {error && (
+        <section className="panel">
+          <p className="error">{error}</p>
+        </section>
+      )}
 
       <section className="panel">
         {busy && !rows.length ? (
           <CardSkeletons />
         ) : !rows.length ? (
-          <EmptyState glyph="❑">Nothing saved here yet. Mark items Interested or Shortlist from a feed.</EmptyState>
+          <EmptyState glyph="❑">Nothing here yet. Mark items Interested or Shortlist from Feeds or Browse.</EmptyState>
         ) : (
           <div className="grid-cards">
             {rows.map((row) => (
@@ -127,7 +141,7 @@ export default function SavedPage() {
                 domainSlug={domain.slug}
                 currentState={row.state}
                 notes={row.notes}
-                busy={busy}
+                busy={Boolean(busyIds[row.item.id])}
                 onSetState={setState}
                 onClearState={clearState}
               />

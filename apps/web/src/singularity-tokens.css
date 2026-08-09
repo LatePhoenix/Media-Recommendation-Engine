@@ -1,53 +1,64 @@
-/* Singularity Solutions — product UI tokens (vendored from ui/singularity/tokens.css).
-   Shared design system across Singularity apps (AI-Dungeon-Master, VRC-Audio-Server, …).
-   Toggle [data-theme="light"] on <html> for light mode. */
+/* Singularity Solutions — product UI tokens (UI Guidelines v1.0)
+   Companion: Figma "Singularity Design System"
+   https://www.figma.com/design/Ud3PlC4ZHsRMv3IlgCQyz0/Singularity-Design-System
+   Dark-only. RuneForge program/app icons are exempt — do not restyle them with --sss-icon-*. */
 
 :root,
 [data-theme="dark"] {
+  /* Neutrals */
   --sss-bg: #0f1520;
   --sss-panel: #152033;
-  --sss-input: #0c121c;
-  --sss-border: #2a3a55;
-  --sss-blueprint: #4a7fbf;
-  --sss-text: #f4f7ff;
-  --sss-body: #e8edf7;
-  --sss-muted: #9aa4b8;
-  --sss-accent-text: #8be9c7;
-  --sss-btn: #1c2738;
-  --sss-btn-border: #3a4a62;
-  --sss-cta: #3ddc84; /* in-app action accent — remint per domain if needed */
-  --sss-icon-cyan: #0ce0ef; /* app-icon / brand glyph glow — NOT the CTA color (see design system §9) */
-  --sss-icon-core: #d8ffff; /* hot core of the neon glyph */
-  --sss-danger: #e05b5b;
-  --sss-warning: #e0a83d;
-  --sss-on-cta: #0b0e14;
+  --sss-raised: #1e2f4a;
+  --sss-input: #0b0f17;
+  --sss-border: #232e42;
+  --sss-border-subtle: #1a2333;
+
+  /* Text */
+  --sss-text: #f2f5fa;
+  --sss-body: #a9b4c7;
+  --sss-muted: #7a8296;
+
+  /* Accents — cyan = brand/nav/focus; green = primary action / live */
+  --sss-cyan: #22d3ee;
+  --sss-blueprint: var(--sss-cyan); /* legacy alias → brand cyan */
+  --sss-cta: #3ddc84;
+  --sss-warning: #f5b942;
+  --sss-danger: #f2545b;
+  --sss-on-accent: #06131c;
+  --sss-on-cta: var(--sss-on-accent); /* legacy alias */
+
+  /* Controls */
+  --sss-btn: var(--sss-raised);
+  --sss-btn-border: var(--sss-border);
+  --sss-accent-text: var(--sss-cyan);
+
+  /* Utility product icon glow only (not RuneForge app icons) */
+  --sss-icon-cyan: #22d3ee;
+  --sss-icon-core: #d8ffff;
+
+  /* Atmosphere */
   --sss-grid-line: #ffffff;
   --sss-grid-opacity: 0.04;
-  --sss-radius-control: 8px;
-  --sss-radius-card: 12px;
-  --sss-space: 4px;
-  --sss-font: "Satoshi", "Inter", "Segoe UI", system-ui, sans-serif;
-  --sss-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
-}
 
-[data-theme="light"] {
-  --sss-bg: #f4f7fb;
-  --sss-panel: #ffffff;
-  --sss-input: #f0f4fa;
-  --sss-border: #c5d0e0;
-  --sss-blueprint: #1557c0;
-  --sss-text: #111827;
-  --sss-body: #1f2937;
-  --sss-muted: #5b6472;
-  --sss-accent-text: #0f766e;
-  --sss-btn: #e5eaf2;
-  --sss-btn-border: #c7d0de;
-  --sss-cta: #1db954;
-  --sss-danger: #d64545;
-  --sss-warning: #b45309;
-  --sss-on-cta: #0b0e14;
-  --sss-grid-line: #1557c0;
-  --sss-grid-opacity: 0.06;
+  /* Radius: 6 badge · 9 control · 12 card · 18 modal */
+  --sss-radius-badge: 6px;
+  --sss-radius-control: 9px;
+  --sss-radius-card: 12px;
+  --sss-radius-modal: 18px;
+
+  /* Spacing: 4 · 8 · 12 · 16 · 24 · 32 · 48 */
+  --sss-space: 4px;
+  --sss-space-xs: 4px;
+  --sss-space-sm: 8px;
+  --sss-space-md: 12px;
+  --sss-space-lg: 16px;
+  --sss-space-xl: 24px;
+  --sss-space-2xl: 32px;
+  --sss-space-3xl: 48px;
+
+  /* Type — Inter for UI; JetBrains Mono for data */
+  --sss-font: "Inter", "Segoe UI", system-ui, sans-serif;
+  --sss-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
 }
 
 /* Signature blueprint grid canvas */
@@ -57,6 +68,7 @@
   background: var(--sss-bg);
   color: var(--sss-body);
   font-family: var(--sss-font);
+  color-scheme: dark;
 }
 
 .sss-canvas::before {
@@ -69,4 +81,219 @@
     linear-gradient(var(--sss-grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--sss-grid-line) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.sss-card {
+  position: relative;
+  background: var(--sss-panel);
+  border: 1px solid var(--sss-border);
+  border-radius: var(--sss-radius-card);
+  padding: 16px;
+}
+
+.sss-help {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--sss-muted);
+  margin-top: 6px;
+}
+
+.sss-eyebrow {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sss-muted);
+}
+
+/* Primary action — Signal Green */
+.sss-cta {
+  background: var(--sss-cta);
+  color: var(--sss-on-accent);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  border: 0;
+  border-radius: var(--sss-radius-control);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+.sss-cta:hover {
+  opacity: 0.92;
+}
+
+.sss-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Brand / nav — Cyan */
+.sss-brand {
+  background: var(--sss-cyan);
+  color: var(--sss-on-accent);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  border: 0;
+  border-radius: var(--sss-radius-control);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+.sss-brand:hover {
+  opacity: 0.92;
+}
+
+.sss-brand:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Secondary / ghost */
+.sss-secondary {
+  background: var(--sss-btn);
+  color: var(--sss-text);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  border: 1px solid var(--sss-border);
+  border-radius: var(--sss-radius-control);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+.sss-secondary:hover {
+  background: var(--sss-raised);
+}
+
+.sss-ghost {
+  background: transparent;
+  color: var(--sss-body);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  border: 1px solid transparent;
+  border-radius: var(--sss-radius-control);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+.sss-ghost:hover {
+  color: var(--sss-text);
+  background: var(--sss-raised);
+}
+
+.sss-danger {
+  background: var(--sss-danger);
+  color: var(--sss-text);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  border: 0;
+  border-radius: var(--sss-radius-control);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+.sss-danger:hover {
+  opacity: 0.92;
+}
+
+/* Sunken inputs */
+.sss-input,
+input.sss-input,
+textarea.sss-input,
+select.sss-input {
+  background: var(--sss-input);
+  color: var(--sss-text);
+  border: 1px solid var(--sss-border);
+  border-radius: var(--sss-radius-control);
+  padding: 8px 12px;
+  font-family: var(--sss-font);
+  font-size: 13px;
+  line-height: 18px;
+  color-scheme: dark;
+}
+
+.sss-input:focus,
+input.sss-input:focus,
+textarea.sss-input:focus,
+select.sss-input:focus {
+  outline: 2px solid var(--sss-cyan);
+  outline-offset: 1px;
+  border-color: var(--sss-cyan);
+}
+
+.sss-input::placeholder {
+  color: var(--sss-muted);
+}
+
+.sss-input:disabled {
+  color: var(--sss-muted);
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Status — always pair a dot with the label */
+.sss-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--sss-body);
+}
+
+.sss-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--sss-muted);
+}
+
+.sss-status.is-online .sss-status-dot,
+.sss-status.is-ok .sss-status-dot {
+  background: var(--sss-cta);
+}
+
+.sss-status.is-idle .sss-status-dot {
+  background: var(--sss-cyan);
+}
+
+.sss-status.is-warn .sss-status-dot,
+.sss-status.is-degraded .sss-status-dot {
+  background: var(--sss-warning);
+}
+
+.sss-status.is-off .sss-status-dot,
+.sss-status.is-error .sss-status-dot {
+  background: var(--sss-danger);
+}
+
+/* Selected nav / list row: raised fill + cyan left rule */
+.sss-selected {
+  background: var(--sss-raised);
+  border-left: 2px solid var(--sss-cyan);
+}
+
+.sss-byline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--sss-muted);
+}
+
+.sss-byline img {
+  width: 22px;
+  height: 22px;
+}
+
+.sss-mono {
+  font-family: var(--sss-mono);
+  font-size: 12px;
+  line-height: 18px;
 }

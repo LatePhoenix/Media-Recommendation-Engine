@@ -106,6 +106,13 @@ async def fetch_artwork(
     if src.source == "plex" and token:
         headers["X-Plex-Token"] = str(token)
         headers["Accept"] = "*/*"
+    elif src.source == "jellyfin" and token:
+        auth = (
+            'MediaBrowser Client="MediaRec", Device="MediaRec", '
+            f'DeviceId="media-rec", Version="0.1.0", Token="{token}"'
+        )
+        headers["Authorization"] = auth
+        headers["X-Emby-Authorization"] = auth
     elif token:
         headers["Authorization"] = f"Bearer {token}"
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, BrowseFilters, Item, ItemState, MediaType } from "../api";
 import { DOMAIN_LABEL } from "../domains";
 import { useDomain } from "../useDomain";
 import MediaCard from "../components/MediaCard";
+import DomainSubnav from "../components/DomainSubnav";
 import { CardSkeletons, EmptyState } from "../components/Poster";
 
 // Which filter fields make sense per media type (Phase 1 per-domain filters).
@@ -28,8 +28,21 @@ export default function BrowsePage() {
   const domain = useDomain();
   const [filters, setFilters] = useState<BrowseFilters>({ sort: "popularity" });
   const [items, setItems] = useState<Item[]>([]);
+  const [states, setStates] = useState<Record<string, ItemState>>({});
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const hydrateStates = useCallback(async (slug: string) => {
+    try {
+      const saved = await api.listSaved(slug, { limit: 200 });
+      const map: Record<string, ItemState> = {};
+      for (const row of saved) map[row.item.id] = row.state;
+      setStates(map);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const run = useCallback(async () => {
     if (!domain) return;
@@ -37,12 +50,13 @@ export default function BrowsePage() {
     setError(null);
     try {
       setItems(await api.browse(domain.slug, filters));
+      await hydrateStates(domain.slug);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Browse failed");
     } finally {
       setBusy(false);
     }
-  }, [domain, filters]);
+  }, [domain, filters, hydrateStates]);
 
   useEffect(() => {
     run();
@@ -56,18 +70,38 @@ export default function BrowsePage() {
 
   async function setState(itemId: string, state: ItemState, notes?: string) {
     if (!domain) return;
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.setState(domain.slug, itemId, { state, notes });
+      setStates((s) => ({ ...s, [itemId]: state }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save state");
+    } finally {
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
   async function clearState(itemId: string) {
     if (!domain) return;
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.clearState(domain.slug, itemId);
+      setStates((s) => {
+        const next = { ...s };
+        delete next[itemId];
+        return next;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not clear state");
+    } finally {
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
 
@@ -75,10 +109,8 @@ export default function BrowsePage() {
     <div>
       <section className="panel feed-hero">
         <h2>{DOMAIN_LABEL[domain.mediaType]} · Browse</h2>
-        <p className="lead">
-          <Link to={`/${domain.slug}`}>Feeds</Link> · <Link to={`/${domain.slug}/saved`}>Saved</Link> ·{" "}
-          <Link to={`/${domain.slug}/series`}>Series</Link>
-        </p>
+        <DomainSubnav slug={domain.slug} />
+        <p className="lead">Filter the catalog. Add picks to My List with Interested or Shortlist.</p>
         <div className="filter-grid">
           <input className="input" placeholder="Search title" onChange={(e) => set({ q: e.target.value || undefined })} />
           {fields.includes("genre") && (
@@ -160,7 +192,11 @@ export default function BrowsePage() {
         </div>
       </section>
 
-      {error && <section className="panel"><p className="error">{error}</p></section>}
+      {error && (
+        <section className="panel">
+          <p className="error">{error}</p>
+        </section>
+      )}
 
       <section className="panel">
         {busy && !items.length ? (
@@ -175,7 +211,8 @@ export default function BrowsePage() {
                 item={item}
                 mediaType={domain.mediaType}
                 domainSlug={domain.slug}
-                busy={busy}
+                currentState={states[item.id] ?? null}
+                busy={Boolean(busyIds[item.id])}
                 onSetState={setState}
                 onClearState={clearState}
               />

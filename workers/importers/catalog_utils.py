@@ -93,6 +93,29 @@ def upsert_item(
     if norm.series:
         item.series = norm.series
     item.popularity = min(float(item.popularity or 0.0) + 0.1, POPULARITY_CEILING)
+
+    # Fill missing artwork from public providers (never authoritative for ranking).
+    if not item.cover_url:
+        try:
+            from app.config import get_settings
+            from workers.importers.poster_enrichment import extract_provider_ids, resolve_poster_url
+
+            ids = extract_provider_ids(getattr(norm, "raw", None))
+            settings = get_settings()
+            poster = resolve_poster_url(
+                media_type=str(norm.media_type),
+                title=norm.title,
+                release_year=norm.release_year,
+                tmdb_id=ids.get("tmdb"),
+                imdb_id=ids.get("imdb"),
+                isbn=ids.get("isbn"),
+                tmdb_api_key=getattr(settings, "tmdb_api_key", None) or None,
+            )
+            if poster:
+                item.cover_url = poster
+        except Exception:  # noqa: BLE001
+            pass
+
     db.add(item)
     db.flush()
     # Populate canonical creators/series/tags/aliases from the refreshed fields.

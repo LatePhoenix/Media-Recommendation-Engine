@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_embed_model: str = "nomic-embed-text"
     enrichment_enabled: bool = False
+    # Optional public metadata (posters / catalog harvest). Ranking does not depend on these.
+    tmdb_api_key: str = ""
     pass_cooldown_days: int = 14
     onboarding_min_ratings: int = 10
     # When the RQ queue is unavailable, only run imports inline (in the request thread)

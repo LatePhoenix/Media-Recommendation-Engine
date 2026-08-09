@@ -32,6 +32,7 @@ export default function ImportsPage() {
       audiobookshelf: { name: "Home Audiobookshelf", url: "http://localhost:13378" },
       komga: { name: "Home Komga", url: "http://localhost:25600" },
       trakt: { name: "Trakt", url: "https://api.trakt.tv" },
+      tmdb: { name: "TMDB catalog", url: "https://api.themoviedb.org" },
     };
     const selected = defaults[nextSource];
     if (selected) {
@@ -46,9 +47,16 @@ export default function ImportsPage() {
     setError(null);
     try {
       const credentials: Record<string, string> = {};
-      if (apiKey) credentials.api_key = apiKey;
-      if (username) credentials.username = username;
-      if (password) credentials.password = password;
+      if (source === "trakt") {
+        if (username) credentials.client_id = username;
+        if (apiKey) credentials.access_token = apiKey;
+      } else if (source === "tmdb") {
+        if (apiKey) credentials.api_key = apiKey;
+      } else {
+        if (apiKey) credentials.api_key = apiKey;
+        if (username) credentials.username = username;
+        if (password) credentials.password = password;
+      }
       await api.createSource({
         source,
         display_name: displayName,
@@ -111,8 +119,9 @@ export default function ImportsPage() {
       <section className="panel">
         <h2>Connected sources</h2>
         <p className="lead">
-          Jellyfin, Plex, and Audiobookshelf sync catalog + consumption. Komga/Trakt are stubbed. This app owns
-          pass/save/rate.
+          Sync libraries (Jellyfin, Plex, Audiobookshelf), personal history (Trakt), and public catalog
+          harvest (TMDB). Artwork for server libraries loads through an authenticated proxy; TMDB/Open
+          Library fill missing posters when configured. Ranking stays local-first.
         </p>
         {!sources.length ? (
           <p className="muted">No sources yet.</p>
@@ -145,8 +154,9 @@ export default function ImportsPage() {
                 <option value="jellyfin">Jellyfin</option>
                 <option value="plex">Plex</option>
                 <option value="audiobookshelf">Audiobookshelf</option>
+                <option value="trakt">Trakt</option>
+                <option value="tmdb">TMDB catalog</option>
                 <option value="komga">Komga (stub)</option>
-                <option value="trakt">Trakt (stub)</option>
               </select>
             </label>
             <label className="field">
@@ -164,19 +174,41 @@ export default function ImportsPage() {
               for a Plex server on this machine.
             </p>
           ) : null}
+          {source === "trakt" ? (
+            <p className="muted">
+              Use your Trakt API app client id and an OAuth access token. Optional: set{" "}
+              <span className="mono">TMDB_API_KEY</span> for posters.
+            </p>
+          ) : null}
+          {source === "tmdb" ? (
+            <p className="muted">
+              API key can be entered here or provided as <span className="mono">TMDB_API_KEY</span> in the
+              environment. Harvests popular/trending movies and TV (not used for ranking scores).
+            </p>
+          ) : null}
           <div className="row">
             <label className="field">
-              {source === "plex" ? "Plex access token" : "API key / token"}
+              {source === "plex"
+                ? "Plex access token"
+                : source === "trakt"
+                  ? "Access token"
+                  : source === "tmdb"
+                    ? "TMDB API key"
+                    : "API key / token"}
               <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
             </label>
-            <label className="field">
-              Username
-              <input value={username} onChange={(e) => setUsername(e.target.value)} />
-            </label>
-            <label className="field">
-              Password
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </label>
+            {source !== "tmdb" ? (
+              <label className="field">
+                {source === "trakt" ? "Client id" : "Username"}
+                <input value={username} onChange={(e) => setUsername(e.target.value)} />
+              </label>
+            ) : null}
+            {source !== "trakt" && source !== "tmdb" ? (
+              <label className="field">
+                Password
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
+            ) : null}
           </div>
           <button className="btn btn-primary" type="submit" disabled={busy}>
             Add source
