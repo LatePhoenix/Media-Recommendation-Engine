@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth import RATING_LABEL_TO_VALUE, get_current_user
 from app.db import get_db
-from app.models import InteractionType, User, UserInteraction
+from app.models import InteractionType, Item, User, UserInteraction
 from app.schemas import InteractionBatchCreate, InteractionCreate, InteractionOut
 
 router = APIRouter(prefix="/api/interactions", tags=["interactions"])
@@ -24,6 +24,11 @@ def create_interaction(
     user: User,
     payload: InteractionCreate,
 ) -> UserInteraction:
+    # Reject unknown item_ids up front with a 404 instead of letting the FK violation
+    # surface as a 500 on flush/commit. (db.get hits the identity map, so a batch that
+    # references the same item repeatedly pays a single lookup.)
+    if db.get(Item, payload.item_id) is None:
+        raise HTTPException(status_code=404, detail="Item not found")
     value = _resolve_value(payload)
     if payload.interaction_type == InteractionType.rate and value is None:
         value = 0.0

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import create_access_token, get_current_user, get_user_by_username, hash_password, verify_password
@@ -31,6 +33,13 @@ _DUMMY_PASSWORD_HASH = hash_password("timing-equalization-placeholder")
     dependencies=[Depends(_register_ip_limiter)],
 )
 def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
+    # Serialize concurrent registrations for the duration of this transaction so two
+    # requests can't both observe an empty users table and both be granted admin (the
+    # first-user bootstrap below). Postgres advisory lock; a no-op on other backends.
+    # Register is heavily rate-limited, so the added contention is negligible.
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": 0x6D656469})  # 'medi'
+
     if not settings.registration_enabled and db.query(User).count() > 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -55,7 +64,15 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
         is_admin=is_first,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # A concurrent request registered the same username/email between the check
+        # above and this commit. Surface the same generic message rather than a 500.
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="That username or email is not available."
+        ) from exc
     db.refresh(user)
     return user
 

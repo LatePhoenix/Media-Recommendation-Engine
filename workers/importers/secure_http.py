@@ -48,12 +48,18 @@ class _PinnedRedirectTransport(httpx.AsyncHTTPTransport):
         connect_url, host_header = _rewrite_to_pinned(str(request.url), resolved)
         headers = request.headers.copy()
         headers["Host"] = host_header
+        # The connect URL's host is the pinned IP (so the socket connects to the vetted
+        # address, defeating DNS rebinding), but TLS SNI and certificate verification must
+        # still use the real hostname — otherwise every https:// source fails cert
+        # validation against the bare IP. The sni_hostname extension overrides the TLS
+        # server_hostname without changing the connect address.
+        extensions = {**request.extensions, "sni_hostname": resolved.hostname}
         pinned_req = httpx.Request(
             request.method,
             connect_url,
             headers=headers,
             content=request.content,
-            extensions=request.extensions,
+            extensions=extensions,
         )
         return await super().handle_async_request(pinned_req)
 

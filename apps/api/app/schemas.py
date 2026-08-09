@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -261,6 +262,16 @@ class ManualLinkIn(BaseModel):
     external_url: str = Field(min_length=1, max_length=2048)
     external_key: str | None = Field(default=None, max_length=255)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    @field_validator("external_url")
+    @classmethod
+    def _http_scheme_only(cls, v: str) -> str:
+        # Stored and rendered as an <a href> in the client. Reject non-http(s) schemes
+        # (javascript:, data:, …) so a manual link can't become a stored-XSS payload.
+        scheme = urlparse(v).scheme.lower()
+        if scheme not in {"http", "https"}:
+            raise ValueError("external_url must be an http(s) URL")
+        return v
 
 
 class ItemDetailOut(ItemOut):
