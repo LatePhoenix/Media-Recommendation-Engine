@@ -1,27 +1,29 @@
 @import "./singularity-tokens.css";
 
-/* Semantic aliases over the Singularity tokens (mirrors the AI-Dungeon-Master
-   client convention so component code reads naturally). */
+/* Semantic aliases — Singularity UI Guidelines v1.0 / Figma Design System. */
 :root {
   --bg-deep: var(--sss-bg);
   --bg-panel: var(--sss-panel);
   --bg-input: var(--sss-input);
-  --bg-elevated: var(--sss-btn);
+  --bg-elevated: var(--sss-raised);
   --border: var(--sss-border);
-  --border-strong: var(--sss-btn-border);
+  --border-strong: var(--sss-border);
+  --border-subtle: var(--sss-border-subtle);
   --text-strong: var(--sss-text);
   --text: var(--sss-body);
   --muted: var(--sss-muted);
-  --accent: var(--sss-cta); /* green — in-app CTA */
-  --accent-dim: var(--sss-blueprint); /* blueprint blue */
-  --accent-text: var(--sss-accent-text); /* mint */
-  --brand-glow: var(--sss-icon-cyan); /* cyan — brand glyph only (§9) */
+  --accent: var(--sss-cta); /* Signal Green — primary action / success */
+  --brand: var(--sss-cyan); /* Brand Cyan — links, focus, selection */
+  --accent-dim: var(--sss-cyan);
+  --accent-text: var(--sss-cyan);
+  --brand-glow: var(--sss-icon-cyan);
   --brand-core: var(--sss-icon-core);
   --danger: var(--sss-danger);
   --warning: var(--sss-warning);
-  --on-cta: var(--sss-on-cta);
+  --on-cta: var(--sss-on-accent);
   --radius: var(--sss-radius-card);
   --radius-control: var(--sss-radius-control);
+  --radius-badge: var(--sss-radius-badge);
   --font: var(--sss-font);
   --mono: var(--sss-mono);
 }
@@ -39,11 +41,16 @@ body,
   margin: 0;
 }
 
+html {
+  color-scheme: dark;
+}
+
 body {
   font-family: var(--font);
   color: var(--text);
   background: var(--bg-deep);
   line-height: 1.5;
+  font-size: 13px;
 }
 
 /* Signature blueprint grid canvas behind everything. */
@@ -67,7 +74,7 @@ body::before {
 }
 
 a {
-  color: var(--accent-text);
+  color: var(--brand);
   text-decoration: none;
 }
 a:hover {
@@ -114,7 +121,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 22px;
-  padding: 18px 14px;
+  padding: 16px 12px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -128,7 +135,9 @@ textarea {
 
 .brand strong {
   color: var(--text-strong);
-  font-size: 1rem;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
   letter-spacing: 0.01em;
 }
 
@@ -141,7 +150,7 @@ textarea {
   position: relative;
   background: radial-gradient(circle at 50% 45%, var(--brand-core) 0%, var(--brand-glow) 38%, #0a3a44 78%);
   border: 1px solid var(--brand-glow);
-  box-shadow: 0 0 10px rgba(12, 224, 239, 0.55), inset 0 0 6px rgba(216, 255, 255, 0.35);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.45), inset 0 0 6px rgba(216, 255, 255, 0.35);
 }
 .brand-mark::after {
   content: "";
@@ -153,6 +162,25 @@ textarea {
   opacity: 0.9;
 }
 
+/* Real app icon variant: the PNG already carries its own dark rounded-square
+   background + cyan glow (VRC-Audio/Video-Server family), so drop the CSS glyph
+   gradient/border/glow and just render the image. */
+.brand-logo {
+  background: none;
+  border: none;
+  box-shadow: none;
+  object-fit: cover;
+  display: block;
+}
+.brand-logo::after {
+  content: none;
+}
+.brand-logo-lg {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+}
+
 .nav-group {
   display: flex;
   flex-direction: column;
@@ -160,9 +188,11 @@ textarea {
 }
 
 .nav-label {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.66rem;
   color: var(--muted);
   padding: 0 8px 4px;
 }
@@ -173,23 +203,72 @@ textarea {
   padding: 8px 10px;
   border-radius: var(--radius-control);
   border: 1px solid transparent;
+  border-left: 2px solid transparent;
   background: transparent;
   cursor: pointer;
   text-align: left;
-  font-size: 0.92rem;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .nav-group a.active {
   color: var(--text-strong);
-  border-color: var(--accent-dim);
-  background: rgba(74, 127, 191, 0.16);
+  background: var(--bg-elevated);
+  border-color: transparent;
+  border-left: 2px solid var(--brand);
+}
+
+.nav-group a.active-parent {
+  color: var(--text-strong);
+}
+
+.nav-domain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group a.nav-nested {
+  padding-left: 22px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .nav-group a:hover,
 .nav-group button.linkish:hover {
-  color: var(--text);
+  color: var(--text-strong);
   background: var(--bg-elevated);
   text-decoration: none;
+}
+
+.domain-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.domain-subnav a {
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  background: transparent;
+}
+
+.domain-subnav a:hover {
+  color: var(--text-strong);
+  text-decoration: none;
+  background: var(--bg-elevated);
+}
+
+.domain-subnav a.active {
+  color: var(--text-strong);
+  border-color: var(--brand);
+  background: var(--bg-elevated);
 }
 
 .nav-foot {
@@ -199,24 +278,6 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-input);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.78rem;
-  width: fit-content;
-}
-.theme-toggle:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
 }
 
 .content {
@@ -229,38 +290,44 @@ textarea {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px 22px;
+  padding: 16px;
 }
 .panel + .panel {
-  margin-top: 16px;
+  margin-top: 24px;
 }
 .panel h2 {
   margin: 0 0 8px;
-  font-size: 1.05rem;
+  font-size: 15px;
+  line-height: 20px;
   font-weight: 600;
   color: var(--text-strong);
 }
 .panel h3 {
   margin: 0 0 10px;
-  font-size: 0.95rem;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .panel p.lead,
 .lead {
   margin: 0 0 16px;
   color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 18px;
   max-width: 64ch;
 }
 
 .feed-hero {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 .feed-hero h2 {
-  font-size: 1.55rem;
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
   margin: 0 0 6px;
   letter-spacing: -0.01em;
+  color: var(--text-strong);
 }
 
 /* ---------- Layout helpers ---------- */
@@ -312,15 +379,23 @@ textarea {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  color: var(--text);
-  padding: 10px 12px;
+  color: var(--text-strong);
+  padding: 8px 12px;
   outline: none;
+  font-size: 13px;
+  line-height: 18px;
 }
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--accent-dim);
-  box-shadow: 0 0 0 3px rgba(74, 127, 191, 0.25);
+  border-color: var(--brand);
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
 }
 .input {
   width: 100%;
@@ -332,40 +407,39 @@ textarea:focus {
   appearance: none;
   border-radius: var(--radius-control);
   border: 1px solid transparent;
-  padding: 10px 14px;
+  padding: 9px 16px;
   cursor: pointer;
   font-weight: 600;
-  transition: background 160ms ease, border-color 160ms ease, transform 120ms ease, opacity 160ms ease;
-}
-.btn:active {
-  transform: translateY(1px);
+  font-size: 12px;
+  line-height: 16px;
+  transition: background 160ms ease, border-color 160ms ease, opacity 160ms ease;
 }
 .btn-primary {
   background: var(--accent);
   color: var(--on-cta);
 }
 .btn-primary:hover {
-  opacity: 0.9;
+  opacity: 0.92;
 }
 .btn-secondary {
   background: var(--bg-elevated);
   border-color: var(--border);
-  color: var(--text);
+  color: var(--text-strong);
 }
 .btn-secondary:hover {
-  border-color: var(--border-strong);
+  background: var(--sss-raised);
 }
 .btn-ghost {
   background: transparent;
-  color: var(--muted);
+  color: var(--text);
   border-color: transparent;
 }
 .btn-ghost:hover {
-  color: var(--text);
-  border-color: var(--border);
+  color: var(--text-strong);
+  background: var(--bg-elevated);
 }
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -384,11 +458,14 @@ textarea:focus {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
 }
 .tab.active {
   color: var(--text-strong);
-  border-color: var(--accent-dim);
-  background: rgba(74, 127, 191, 0.16);
+  border-color: var(--brand);
+  background: var(--bg-elevated);
 }
 
 .meta {
@@ -400,12 +477,12 @@ textarea:focus {
 }
 .chip {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-badge);
   padding: 2px 7px;
 }
 .chip.layer {
-  border-color: var(--accent-dim);
-  color: var(--accent-text);
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 /* ---------- Media cards ---------- */
@@ -420,21 +497,21 @@ textarea:focus {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   animation: rise 260ms ease both;
-  transition: border-color 160ms ease, transform 160ms ease;
+  transition: border-color 160ms ease;
 }
 .media-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-2px);
+  border-color: var(--brand);
 }
 .media-card h3 {
   margin: 0;
-  font-size: 1rem;
-  line-height: 1.3;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .media-card h3 .title-link {
@@ -447,7 +524,7 @@ textarea:focus {
   cursor: pointer;
 }
 .media-card h3 .title-link:hover {
-  color: var(--accent-text);
+  color: var(--brand);
   text-decoration: none;
 }
 
@@ -515,7 +592,9 @@ textarea:focus {
   gap: 6px;
 }
 .chip-btn {
-  font-size: 0.75rem;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
   padding: 5px 9px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -524,7 +603,7 @@ textarea:focus {
   cursor: pointer;
 }
 .chip-btn:hover {
-  color: var(--text);
+  color: var(--text-strong);
   background: var(--bg-elevated);
 }
 .chip-btn.active {
@@ -533,7 +612,7 @@ textarea:focus {
   background: var(--accent);
 }
 .chip-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -724,19 +803,22 @@ textarea:focus {
   width: min(420px, 100%);
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 28px;
+  border-radius: var(--sss-radius-modal);
+  padding: 24px;
   animation: rise 320ms ease both;
 }
 .auth-card h1 {
   margin: 0 0 4px;
-  font-size: 1.4rem;
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .auth-card .sub {
   color: var(--muted);
   margin: 0 0 20px;
-  font-size: 0.9rem;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 /* ---------- Animations ---------- */

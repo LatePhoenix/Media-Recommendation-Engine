@@ -1,24 +1,26 @@
-export type Theme = "dark" | "light";
+/** Dark-only per Singularity UI Guidelines v1.0 (light mode is out of system). */
 
-const KEY = "mre-theme";
+export type Theme = "dark";
 
 export function getTheme(): Theme {
-  const stored = localStorage.getItem(KEY);
-  return stored === "light" ? "light" : "dark";
+  return "dark";
 }
 
-export function applyTheme(theme: Theme): void {
-  document.documentElement.setAttribute("data-theme", theme);
-  document.documentElement.style.colorScheme = theme;
+export function applyTheme(_theme: Theme = "dark"): void {
+  document.documentElement.setAttribute("data-theme", "dark");
+  document.documentElement.style.colorScheme = "dark";
+  try {
+    localStorage.removeItem("mre-theme");
+  } catch {
+    /* ignore */
+  }
 }
 
-export function setTheme(theme: Theme): void {
-  localStorage.setItem(KEY, theme);
-  applyTheme(theme);
+export function setTheme(_theme: Theme): void {
+  applyTheme("dark");
 }
 
 export function toggleTheme(): Theme {
-  const next: Theme = getTheme() === "dark" ? "light" : "dark";
-  setTheme(next);
-  return next;
+  applyTheme("dark");
+  return "dark";
 }

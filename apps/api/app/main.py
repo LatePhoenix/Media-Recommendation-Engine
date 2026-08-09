@@ -26,7 +26,7 @@ app.add_middleware(
     # CORS is unnecessary — and disabling it prevents accidental cookie/credential
     # exposure if origins are ever widened.
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -95,6 +95,12 @@ def ready() -> dict:
         checks["redis"] = "ok"
     except Exception:  # noqa: BLE001
         checks["redis"] = "error"
+
+    # Surface which rate-limit backend is live so operators can tell whether shared
+    # (Redis) limits are actually engaged or the process fell back to per-process memory.
+    from app.rate_limit import active_backend_name
+
+    checks["rate_limiter"] = active_backend_name()
 
     ok = checks.get("database") == "ok" and checks.get("redis") == "ok"
     body = {"status": "ready" if ok else "degraded", "checks": checks, "version": app.version}

@@ -366,11 +366,12 @@ export const api = {
 
   listSaved: (
     domain: string,
-    opts: { state?: ItemState[]; sort?: SavedSort } = {},
+    opts: { state?: ItemState[]; sort?: SavedSort; limit?: number } = {},
   ) => {
     const params = new URLSearchParams();
     (opts.state || []).forEach((s) => params.append("state", s));
     if (opts.sort) params.set("sort", opts.sort);
+    if (opts.limit) params.set("limit", String(opts.limit));
     const qs = params.toString();
     return request<SavedItem[]>(`/api/${domain}/saved${qs ? `?${qs}` : ""}`);
   },

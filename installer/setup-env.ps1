@@ -21,14 +21,25 @@ if (-not (Test-Path $Example)) {
 }
 
 function New-UrlSafeToken([int]$bytes) {
+  # Windows PowerShell 5.1 / .NET Framework: RandomNumberGenerator.Fill is unavailable.
   $buf = New-Object byte[] $bytes
-  [System.Security.Cryptography.RandomNumberGenerator]::Fill($buf)
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($buf)
+  } finally {
+    $rng.Dispose()
+  }
   [Convert]::ToBase64String($buf).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 }
 
 function New-FernetKey {
   $buf = New-Object byte[] 32
-  [System.Security.Cryptography.RandomNumberGenerator]::Fill($buf)
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($buf)
+  } finally {
+    $rng.Dispose()
+  }
   [Convert]::ToBase64String($buf).Replace('+', '-').Replace('/', '_')
 }
 

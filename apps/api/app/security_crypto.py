@@ -1,8 +1,40 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from cryptography.fernet import Fernet, MultiFernet
 
 from app.config import get_settings
+
+
+@lru_cache(maxsize=8)
+def _build_fernets(primary: str, old_keys: tuple[str, ...]) -> tuple[Fernet, MultiFernet]:
+    """Construct the Fernet/MultiFernet from raw key material.
+
+    Cached by the key strings themselves (not a bare no-arg cache), so it is rebuilt
+    automatically when the configured keys change — e.g. across key rotation or in tests
+    that swap ``CREDENTIALS_FERNET_KEY`` — while avoiding a per-call parse of the keys.
+    """
+    if not primary:
+        raise RuntimeError(
+            "CREDENTIALS_FERNET_KEY is required to encrypt import-source credentials. "
+            "Generate one with: "
+            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
+
+    try:
+        primary_fernet = Fernet(primary.encode())
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError(
+            "CREDENTIALS_FERNET_KEY is not a valid Fernet key (expected 32 url-safe base64 bytes)."
+        ) from exc
+
+    try:
+        rotation = MultiFernet([primary_fernet, *(Fernet(k.encode()) for k in old_keys)])
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("CREDENTIALS_FERNET_KEYS_OLD contains an invalid Fernet key.") from exc
+
+    return primary_fernet, rotation
 
 
 def _load_keys() -> tuple[Fernet, MultiFernet]:
@@ -19,27 +51,10 @@ def _load_keys() -> tuple[Fernet, MultiFernet]:
     """
     settings = get_settings()
     primary = settings.credentials_fernet_key.strip()
-    if not primary:
-        raise RuntimeError(
-            "CREDENTIALS_FERNET_KEY is required to encrypt import-source credentials. "
-            "Generate one with: "
-            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-        )
-
-    try:
-        primary_fernet = Fernet(primary.encode())
-    except (ValueError, TypeError) as exc:
-        raise RuntimeError(
-            "CREDENTIALS_FERNET_KEY is not a valid Fernet key (expected 32 url-safe base64 bytes)."
-        ) from exc
-
-    old_keys = [k.strip() for k in settings.credentials_fernet_keys_old.split(",") if k.strip()]
-    try:
-        rotation = MultiFernet([primary_fernet, *(Fernet(k.encode()) for k in old_keys)])
-    except (ValueError, TypeError) as exc:
-        raise RuntimeError("CREDENTIALS_FERNET_KEYS_OLD contains an invalid Fernet key.") from exc
-
-    return primary_fernet, rotation
+    old_keys = tuple(
+        k.strip() for k in settings.credentials_fernet_keys_old.split(",") if k.strip()
+    )
+    return _build_fernets(primary, old_keys)
 
 
 def encrypt_credentials(plaintext: str) -> str:

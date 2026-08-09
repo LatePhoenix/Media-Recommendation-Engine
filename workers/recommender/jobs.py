@@ -15,7 +15,7 @@ from itertools import combinations
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.db import SessionLocal
 from app.models import (
@@ -114,16 +114,25 @@ def rebuild_collaborative_edges(
         for mt in media_types:
             user_items = _positive_user_items(db, mt)
             kept_pairs = cooccurrence_scores(user_items, top_k=top_k, min_co=min_co)
-            item_ids = list({it for items in user_items.values() for it in items})
 
-            # Replace this media type's collaborative edges.
-            if item_ids:
-                db.execute(
-                    delete(SimilarityEdge).where(
-                        SimilarityEdge.kind == "collaborative",
-                        SimilarityEdge.item_a_id.in_(item_ids),
-                    )
+            # Replace this media type's collaborative edges wholesale. Collaborative edges
+            # are only ever created between items of the same media type, and each is stored
+            # once as (item_a_id, item_b_id) — so deleting every edge whose item_a_id is an
+            # item of this media type clears the full set. Filtering by a subquery on
+            # Item.media_type (rather than a Python list of the current positive item ids)
+            # is what makes this correct and safe:
+            #   * removes STALE edges whose endpoints have since dropped out of the positive
+            #     set (the old id-list delete left those behind, so the table only grew);
+            #   * runs unconditionally, so a media type that lost all positive signals still
+            #     gets its now-orphaned edges cleared;
+            #   * avoids IN-list bind-parameter overflow on large catalogs.
+            mt_item_ids = select(Item.id).where(Item.media_type == mt)
+            db.execute(
+                delete(SimilarityEdge).where(
+                    SimilarityEdge.kind == "collaborative",
+                    SimilarityEdge.item_a_id.in_(mt_item_ids),
                 )
+            )
             for (a, b), score in kept_pairs.items():
                 db.add(SimilarityEdge(item_a_id=a, item_b_id=b, kind="collaborative", score=score))
             total_edges += len(kept_pairs)

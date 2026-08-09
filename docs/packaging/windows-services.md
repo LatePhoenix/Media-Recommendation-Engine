@@ -16,7 +16,7 @@ Related:
 
 | Service id | XML | Process | Depends on | Start mode |
 |------------|-----|---------|------------|------------|
-| `mediarec-postgres` | [`installer/services/mediarec-postgres.xml`](../../installer/services/mediarec-postgres.xml) | `postgres.exe -D <PGDATA>` | — | Automatic |
+| `mediarec-postgres` | [`installer/services/mediarec-postgres.xml`](../../installer/services/mediarec-postgres.xml) | `postgres.exe -D <PGDATA>` as **LocalService** | — | Automatic |
 | `mediarec-redis` | [`installer/services/mediarec-redis.xml`](../../installer/services/mediarec-redis.xml) | `redis-server.exe redis.conf` | — | Automatic |
 | `mediarec-api` | [`installer/services/mediarec-api.xml`](../../installer/services/mediarec-api.xml) | `python -m app.launch api` | postgres, redis | Automatic (delayed) |
 | `mediarec-worker` | [`installer/services/mediarec-worker.xml`](../../installer/services/mediarec-worker.xml) | `python -m app.launch worker --queues imports recommender` | postgres, redis | Automatic (delayed) |
@@ -49,7 +49,17 @@ Every service XML includes:
 - `<resetfailure>1 hour</resetfailure>`
 - Rolled file logs under `%ProgramData%\MediaRecommendationEngine\logs\<service>\`
 
-Postgres additionally allows a last-resort reboot action after repeated failures (conservative; can be removed if undesired for kiosk machines).
+Postgres uses restart-on-failure only (same pattern as the other services). Do **not**
+configure WinSW `onfailure action="reboot"` — SCM rejects it with
+“Failed to configure the failure actions. Access is denied” on many elevated sessions,
+and a local media app must not reboot the machine.
+
+`mediarec-postgres` must run as `NT AUTHORITY\LocalService` (not LocalSystem). PostgreSQL
+refuses administrative accounts with “Execution of PostgreSQL by a user with administrative
+permissions is not permitted.” Bootstrap grants LocalService ACLs on PGDATA and service logs
+via `Initialize-MediaRecDatabase.ps1`. `Install-MediaRecServices.ps1` also enforces the
+account with `sc.exe config` after install because WinSW XML `<serviceaccount>` is not
+always applied by the wrapper.
 
 ### Dependency readiness (Phase 6.2)
 

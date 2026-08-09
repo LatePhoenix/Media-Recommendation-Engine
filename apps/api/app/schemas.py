@@ -54,6 +54,21 @@ class UserPrefsUpdate(BaseModel):
     preferences: dict[str, Any] | None = None
     onboarding_complete: bool | None = None
 
+    @field_validator("enabled_media_types")
+    @classmethod
+    def _valid_media_types(cls, v: list[str] | None) -> list[str] | None:
+        # Reject unknown media types at validation time (HTTP 422) so junk values can't be
+        # persisted to the user's JSONB preferences.
+        if v is None:
+            return v
+        valid = {m.value for m in MediaType}
+        unknown = [x for x in v if x not in valid]
+        if unknown:
+            raise ValueError(
+                f"Unknown media types {unknown}; valid values: {sorted(valid)}"
+            )
+        return v
+
 
 # --- Catalog ---
 
@@ -306,7 +321,7 @@ class AdminModelConfigIn(BaseModel):
 
 
 class ImportSourceCreate(BaseModel):
-    source: Literal["jellyfin", "plex", "audiobookshelf", "komga", "trakt"]
+    source: Literal["jellyfin", "plex", "audiobookshelf", "komga", "trakt", "tmdb"]
     display_name: str
     base_url: str | None = None
     credentials: dict[str, Any] = Field(default_factory=dict)

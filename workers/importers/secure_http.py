@@ -34,7 +34,18 @@ class _PinnedRedirectTransport(httpx.AsyncHTTPTransport):
         self._resolved = resolved
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        connect_url, host_header = _rewrite_to_pinned(str(request.url), self._resolved)
+        # On a redirect to a different host, re-run SSRF validation and re-pin to the new
+        # host's vetted IP — otherwise a 3xx Location could smuggle a request to an
+        # internal target. Same-host requests reuse the already-validated pin.
+        req_host = request.url.host
+        if req_host and req_host != self._resolved.hostname:
+            resolved = validate_import_url(
+                str(request.url),
+                allow_private=get_settings().allow_private_import_urls,
+            )
+        else:
+            resolved = self._resolved
+        connect_url, host_header = _rewrite_to_pinned(str(request.url), resolved)
         headers = request.headers.copy()
         headers["Host"] = host_header
         pinned_req = httpx.Request(

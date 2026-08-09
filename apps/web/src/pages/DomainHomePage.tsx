@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, ItemState, RatingLabel, RecommendationFeed, User } from "../api";
 import { DOMAIN_LABEL } from "../domains";
 import { useDomain } from "../useDomain";
 import MediaCard from "../components/MediaCard";
+import DomainSubnav from "../components/DomainSubnav";
 import { CardSkeletons, EmptyState } from "../components/Poster";
 
 const FEEDS = [
@@ -19,27 +19,40 @@ export default function DomainHomePage({ user }: { user: User }) {
   const [feedKey, setFeedKey] = useState("best_next");
   const [feed, setFeed] = useState<RecommendationFeed | null>(null);
   const [states, setStates] = useState<Record<string, ItemState>>({});
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+
+  const hydrateStates = useCallback(async (slug: string) => {
+    try {
+      const saved = await api.listSaved(slug, { limit: 200 });
+      const map: Record<string, ItemState> = {};
+      for (const row of saved) map[row.item.id] = row.state;
+      setStates(map);
+    } catch {
+      // Non-fatal: chips still update after local setState.
+    }
+  }, []);
 
   const load = useCallback(
     async (key: string) => {
       if (!domain) return;
-      setBusy(true);
+      setLoading(true);
       setError(null);
       try {
-        setFeed(await api.domainFeed(domain.slug, key));
+        const next = await api.domainFeed(domain.slug, key);
+        setFeed(next);
+        await hydrateStates(domain.slug);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load feed");
       } finally {
-        setBusy(false);
+        setLoading(false);
       }
     },
-    [domain],
+    [domain, hydrateStates],
   );
 
   useEffect(() => {
-    setStates({});
     load(feedKey);
   }, [feedKey, load]);
 
@@ -47,20 +60,24 @@ export default function DomainHomePage({ user }: { user: User }) {
 
   async function setState(itemId: string, state: ItemState, notes?: string) {
     if (!domain) return;
-    setBusy(true);
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.setState(domain.slug, itemId, { state, notes });
       setStates((s) => ({ ...s, [itemId]: state }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save state");
     } finally {
-      setBusy(false);
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
 
   async function clearState(itemId: string) {
     if (!domain) return;
-    setBusy(true);
+    setBusyIds((b) => ({ ...b, [itemId]: true }));
     try {
       await api.clearState(domain.slug, itemId);
       setStates((s) => {
@@ -71,36 +88,40 @@ export default function DomainHomePage({ user }: { user: User }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not clear state");
     } finally {
-      setBusy(false);
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[itemId];
+        return next;
+      });
     }
   }
 
   async function act(eventId: string, action: string, ratingLabel?: RatingLabel) {
-    setBusy(true);
+    setBusyIds((b) => ({ ...b, [eventId]: true }));
     try {
       await api.recAction(eventId, action, ratingLabel);
       await load(feedKey);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
     } finally {
-      setBusy(false);
+      setBusyIds((b) => {
+        const next = { ...b };
+        delete next[eventId];
+        return next;
+      });
     }
   }
 
   return (
     <div>
       <section className="panel feed-hero">
-        <h2>{DOMAIN_LABEL[domain.mediaType]} · {FEEDS.find((f) => f.key === feedKey)?.title}</h2>
+        <h2>
+          {DOMAIN_LABEL[domain.mediaType]} · {FEEDS.find((f) => f.key === feedKey)?.title}
+        </h2>
+        <DomainSubnav slug={domain.slug} user={user} />
         <p className="lead">
-          Deterministic, single-domain ranking. Interested and Shortlist feed the scorer; Pass suppresses
-          temporarily. <Link to={`/${domain.slug}/browse`}>Browse</Link> ·{" "}
-          <Link to={`/${domain.slug}/saved`}>Saved</Link> · <Link to={`/${domain.slug}/series`}>Series</Link>
-          {user.is_admin ? (
-            <>
-              {" "}
-              · <Link to={`/${domain.slug}/admin`}>Admin</Link>
-            </>
-          ) : null}
+          Recommendations for this domain live here. Mark Interested or Shortlist to shape ranking; your
+          picks are kept in My List.
         </p>
         <div className="tabs">
           {FEEDS.map((f) => (
@@ -114,15 +135,19 @@ export default function DomainHomePage({ user }: { user: User }) {
             </button>
           ))}
         </div>
-        <button className="btn btn-secondary" type="button" disabled={busy} onClick={() => load(feedKey)}>
+        <button className="btn btn-secondary" type="button" disabled={loading} onClick={() => load(feedKey)}>
           Refresh feed
         </button>
       </section>
 
-      {error && <section className="panel"><p className="error">{error}</p></section>}
+      {error && (
+        <section className="panel">
+          <p className="error">{error}</p>
+        </section>
+      )}
 
       <section className="panel">
-        {busy && !feed ? (
+        {loading && !feed ? (
           <CardSkeletons />
         ) : !feed?.items?.length ? (
           <EmptyState glyph="✦">No candidates yet. Rate a few titles in onboarding or import a library.</EmptyState>
@@ -140,7 +165,7 @@ export default function DomainHomePage({ user }: { user: User }) {
                 factors={card.factors}
                 eventId={card.event_id}
                 currentState={states[card.item.id] ?? null}
-                busy={busy}
+                busy={Boolean(busyIds[card.item.id] || busyIds[card.event_id])}
                 onSetState={setState}
                 onClearState={clearState}
                 onAct={act}

@@ -12,6 +12,16 @@ from app.models import Item, ItemState, MediaType, UserItemState
 VALID_BROWSE_SORTS = ("popularity", "title", "release_year", "recently_added")
 
 
+def escape_like(term: str) -> str:
+    """Escape LIKE/ILIKE wildcards so user input is matched literally.
+
+    Without this, a ``%`` or ``_`` in a search term is treated as a wildcard (and a
+    leading ``%`` also defeats the title index). Pair with ``escape="\\"`` on the
+    ``ilike`` call.
+    """
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class CatalogService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -49,13 +59,13 @@ class CatalogService:
         query = self.db.query(Item).filter(Item.media_type == media_type)
 
         if q:
-            query = query.filter(Item.title.ilike(f"%{q}%"))
+            query = query.filter(Item.title.ilike(f"%{escape_like(q)}%", escape="\\"))
         if genre:
             query = query.filter(Item.genres.contains([genre]))
         if creator:
             query = query.filter(Item.creators.contains([creator]))
         if series:
-            query = query.filter(Item.series.ilike(f"%{series}%"))
+            query = query.filter(Item.series.ilike(f"%{escape_like(series)}%", escape="\\"))
         if language:
             query = query.filter(Item.language == language)
         if release_year is not None:

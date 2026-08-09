@@ -28,6 +28,7 @@ from workers.importers.catalog_utils import upsert_item
 from workers.importers.jellyfin import JellyfinConnector
 from workers.importers.komga import KomgaConnector
 from workers.importers.plex import PlexConnector
+from workers.importers.tmdb import TmdbConnector
 from workers.importers.trakt import TraktConnector
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,8 @@ def get_connector(source: str, base_url: str | None):
         return KomgaConnector(base_url or "")
     if s == "trakt":
         return TraktConnector(base_url or "https://api.trakt.tv")
+    if s == "tmdb":
+        return TmdbConnector(base_url or "https://api.themoviedb.org")
     raise ValueError(f"Unsupported connector: {source}")
 
 

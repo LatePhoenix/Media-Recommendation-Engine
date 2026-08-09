@@ -19,9 +19,15 @@
     <sizeThreshold>10240</sizeThreshold>
     <keepFiles>8</keepFiles>
   </log>
+  <!-- LocalSystem is rejected by PostgreSQL on Windows ("administrative permissions"). -->
+  <serviceaccount>
+    <username>NT AUTHORITY\LocalService</username>
+  </serviceaccount>
   <onfailure action="restart" delay="5 sec"/>
   <onfailure action="restart" delay="10 sec"/>
-  <onfailure action="reboot" delay="1 min"/>
+  <!-- Do not use action="reboot": ChangeServiceConfig2 requires SeShutdownPrivilege
+       and fails install with "Failed to configure the failure actions. Access is denied."
+       on many admin sessions; a media app must not reboot the machine. -->
   <resetfailure>1 hour</resetfailure>
   <startmode>Automatic</startmode>
   <delayedAutoStart>false</delayedAutoStart>

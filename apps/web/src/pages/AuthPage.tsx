@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { api } from "../api";
+import appIcon from "../assets/app-icon.png";
 
 export default function AuthPage({ onAuthed }: { onAuthed: () => Promise<void> }) {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -29,7 +30,7 @@ export default function AuthPage({ onAuthed }: { onAuthed: () => Promise<void> }
   return (
     <div className="auth-layout">
       <form className="auth-card stack" onSubmit={submit}>
-        <div className="brand-mark" aria-hidden />
+        <img className="brand-mark brand-logo brand-logo-lg" src={appIcon} alt="" aria-hidden />
         <h1>Media Recommendation Engine</h1>
         <p className="sub">
           Deterministic hybrid recommender. Rate anchors, import libraries, get explainable feeds.

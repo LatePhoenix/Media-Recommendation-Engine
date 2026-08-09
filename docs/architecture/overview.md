@@ -42,7 +42,7 @@ flowchart TB
 | Client | Per-domain shell (feeds/browse/saved/series/admin), item detail, interest states, source links — Singularity design system |
 | API | JWT auth, per-domain catalog/recommendations/interest/collections/links, admin metrics |
 | Engine | Collaborative + content + popularity + novelty + interest + serendipity/availability, layered candidate gen, franchise/creator rerank, structured explanations |
-| Connectors | Jellyfin, Plex, Audiobookshelf, Komga stub, Trakt stub, CSV |
+| Connectors | Jellyfin, Plex, Audiobookshelf, Trakt, TMDB harvest, Komga stub, CSV |
 
 ## UI / design
 

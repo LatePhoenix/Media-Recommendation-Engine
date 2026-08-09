@@ -18,6 +18,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 _login_ip_limiter = IPRateLimiter("login", settings.login_rate_limit_per_minute, 60)
 _register_ip_limiter = IPRateLimiter("register", settings.register_rate_limit_per_hour, 3600)
 
+# Precomputed once at import. Verified against on the username-miss path so a login for a
+# non-existent user still pays the bcrypt cost — otherwise the response-time delta leaks
+# whether a username exists (timing-based user enumeration).
+_DUMMY_PASSWORD_HASH = hash_password("timing-equalization-placeholder")
+
 
 @router.post(
     "/register",
@@ -67,7 +72,11 @@ def login(
         60,
     )
     user = get_user_by_username(db, form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if user is None:
+        # Burn an equivalent bcrypt verification so timing doesn't reveal the miss.
+        verify_password(form_data.password, _DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     token = create_access_token(
         str(user.id),

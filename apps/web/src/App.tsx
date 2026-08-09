@@ -11,29 +11,36 @@ import SeriesPage from "./pages/SeriesPage";
 import AdminPage from "./pages/AdminPage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import ImportsPage from "./pages/ImportsPage";
-import { getTheme, toggleTheme, type Theme } from "./theme";
+import appIcon from "./assets/app-icon.png";
 
 function Shell({ user, onLogout, children }: { user: User; onLogout: () => void; children: ReactNode }) {
   const loc = useLocation();
   const domains = useMemo(() => enabledDomains(user.enabled_media_types), [user.enabled_media_types]);
   const isActive = (to: string) => loc.pathname === to || loc.pathname.startsWith(to + "/");
-  const [theme, setThemeState] = useState<Theme>(getTheme());
 
   return (
     <div className="app-shell with-nav">
       <aside className="sidenav">
         <div className="brand">
-          <div className="brand-mark" aria-hidden />
+          <img className="brand-mark brand-logo" src={appIcon} alt="" aria-hidden />
           <strong>Media Engine</strong>
         </div>
         <nav className="nav-group">
           <span className="nav-label">Domains</span>
           {domains.map((m) => {
             const slug = slugForMedia(m);
+            const base = `/${slug}`;
+            const domainActive = isActive(base);
+            const listPath = `${base}/saved`;
             return (
-              <Link key={m} to={`/${slug}`} className={isActive(`/${slug}`) ? "active" : ""}>
-                {DOMAIN_LABEL[m]}
-              </Link>
+              <div key={m} className="nav-domain">
+                <Link to={base} className={loc.pathname === base ? "active" : domainActive ? "active-parent" : ""}>
+                  {DOMAIN_LABEL[m]}
+                </Link>
+                <Link to={listPath} className={`nav-nested ${isActive(listPath) ? "active" : ""}`}>
+                  My List
+                </Link>
+              </div>
             );
           })}
         </nav>
@@ -50,14 +57,6 @@ function Shell({ user, onLogout, children }: { user: User; onLogout: () => void;
           </button>
         </nav>
         <div className="nav-foot">
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={() => setThemeState(toggleTheme())}
-            title="Toggle light / dark"
-          >
-            {theme === "dark" ? "◐ Light" : "◑ Dark"}
-          </button>
           <span className="muted small">{user.username} · hybrid · local-first</span>
         </div>
       </aside>
@@ -139,6 +138,7 @@ export default function App() {
         <Route path="/:domain" element={<DomainHomePage user={user} />} />
         <Route path="/:domain/browse" element={<BrowsePage />} />
         <Route path="/:domain/saved" element={<SavedPage />} />
+        <Route path="/:domain/my-list" element={<SavedPage />} />
         <Route path="/:domain/series" element={<SeriesPage />} />
         <Route path="/:domain/series/:seriesId" element={<SeriesPage />} />
         <Route

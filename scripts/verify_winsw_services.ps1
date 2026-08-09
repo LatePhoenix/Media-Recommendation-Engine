@@ -7,7 +7,9 @@
   Native payload root containing runtime\winsw
 #>
 param(
-  [string]$OutDir = ""
+  [string]$OutDir = "",
+  # Installer payloads must keep __INSTALLROOT__/__PROGRAMDATA__ until first-run bootstrap.
+  [switch]$ExpectPlaceholders
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,7 +49,12 @@ foreach ($id in $ServiceIds) {
   if (-not (Test-Path -LiteralPath $xmlPath)) { throw "Missing $xmlPath" }
 
   $raw = Get-Content -LiteralPath $xmlPath -Raw
-  if ($raw -match "__INSTALLROOT__" -or $raw -match "__PROGRAMDATA__") {
+  $hasPlaceholders = ($raw -match "__INSTALLROOT__" -or $raw -match "__PROGRAMDATA__")
+  if ($ExpectPlaceholders) {
+    if (-not $hasPlaceholders) {
+      throw "$id.xml must keep __INSTALLROOT__/__PROGRAMDATA__ placeholders for installer payloads"
+    }
+  } elseif ($hasPlaceholders) {
     throw "$id.xml still contains unsubstituted placeholders"
   }
 

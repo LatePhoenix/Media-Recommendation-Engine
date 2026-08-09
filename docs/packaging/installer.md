@@ -20,7 +20,7 @@ at install or runtime for end users.
 
 | Action | Mechanism |
 |--------|-----------|
-| Open app | `Open-MediaRec.url` → `http://127.0.0.1:8000/` (Start Menu / Desktop) |
+| Open app | `Open-MediaRec.vbs` → ensure services → `http://127.0.0.1:8000/` (Start Menu / Desktop) |
 | Stop services | `Stop-MediaRecServices.vbs` → hidden `Install-MediaRecServices.ps1 -Action stop` |
 | Diagnostics | `Collect-Diagnostics.vbs` → `Collect-Diagnostics.ps1 -NonInteractive` |
 | Uninstall | Inno uninstaller + service uninstall; ProgramData retained unless user confirms wipe |
@@ -64,7 +64,7 @@ Do **not** commit PFX files or passwords. Wire secrets in GitHub Actions when re
 Install the resulting `Setup.exe` on a clean machine and confirm:
 
 1. No Docker / WSL / host Python required
-2. Start Menu open shortcut launches the browser to port 8000
+2. Start Menu open shortcut launches the browser to port 8000 (after services are healthy)
 3. `Get-Service mediarec-*` is Running after setup
 4. Stop Services shortcut stops services without a PowerShell window
 5. Collect Diagnostics writes a zip under ProgramData `\diagnostics`
