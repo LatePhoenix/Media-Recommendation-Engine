@@ -91,6 +91,14 @@ foreach ($name in $expected) {
   }
 }
 
+# PostgreSQL refuses to run under an admin account. Assert the service logon is
+# LocalService explicitly so the LocalSystem regression is caught by name, not just
+# as a downstream "postgres not Running" symptom.
+$pgSvc = Get-CimInstance Win32_Service -Filter "Name='mediarec-postgres'" -ErrorAction SilentlyContinue
+if ($pgSvc) {
+  Write-Check "service:mediarec-postgres:account" ($pgSvc.StartName -match "LOCAL SERVICE|LocalService") $pgSvc.StartName
+}
+
 # HTTP
 function Test-Http([string]$Name, [string]$Url, [scriptblock]$Assert) {
   try {

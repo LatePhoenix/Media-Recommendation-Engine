@@ -291,13 +291,50 @@ if ($LASTEXITCODE -ne 0) { throw "WinSW staging failed" }
 if (-not $SkipServices) {
   Write-Info "Installing Windows services..."
   Write-BootstrapLog "Installing services"
-  & powershell -NoProfile -ExecutionPolicy Bypass -File $svcMgr -Action install -InstallRoot $InstallRoot
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $svcMgr -Action install -InstallRoot $InstallRoot -DataRoot $DataRoot
   if ($LASTEXITCODE -ne 0) { throw "Service install failed" }
   if (-not $SkipStart) {
     Write-Info "Starting Windows services..."
     Write-BootstrapLog "Starting services"
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $svcMgr -Action start -InstallRoot $InstallRoot
+    # -Action start health-gates postgres on real 5432 connectivity and self-heals the
+    # LocalService account/ACLs, so a non-zero exit here means the DB is genuinely dead.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $svcMgr -Action start -InstallRoot $InstallRoot -DataRoot $DataRoot
     if ($LASTEXITCODE -ne 0) { throw "Service start failed" }
+
+    # Hard gate: the whole reason 'shortcut does nothing' slipped through was that
+    # bootstrap reported success while :8000 never came up. Require API health before
+    # we are allowed to call the install complete.
+    Write-Info "Waiting for API health on http://127.0.0.1:8000/health ..."
+    $apiReady = $false
+    for ($i = 0; $i -lt 60; $i++) {
+      try {
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing -TimeoutSec 5
+        if ($r.StatusCode -eq 200) { $apiReady = $true; break }
+      } catch { }
+      Start-Sleep -Seconds 2
+    }
+    Write-BootstrapLog "API health reachable=$apiReady"
+    if (-not $apiReady) {
+      throw "API did not become healthy on http://127.0.0.1:8000/health within 120s. See $DataRoot\logs\mediarec-api and \logs\mediarec-postgres."
+    }
+
+    # Full post-install smoke checks. Advisory (logged, not fatal) so a non-critical
+    # check like pgvector warming does not abort an otherwise-working install -- but the
+    # result is always recorded so a regression is never silent again.
+    $verify = Join-Path $Scripts "Verify-NativeInstall.ps1"
+    if (Test-Path -LiteralPath $verify) {
+      Write-Info "Running post-install verification..."
+      Write-BootstrapLog "Running Verify-NativeInstall"
+      $verifyLog = Join-Path (Join-Path $DataRoot "logs") "verify-latest.log"
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $verify -InstallRoot $InstallRoot -DataRoot $DataRoot *>&1 |
+        Tee-Object -FilePath $verifyLog | Out-Null
+      $verifyExit = $LASTEXITCODE
+      Write-BootstrapLog "Verify-NativeInstall exit=$verifyExit (full log: $verifyLog)"
+      if ($verifyExit -ne 0) {
+        Write-Info "WARNING: post-install verification reported failures - see $verifyLog"
+        Write-BootstrapLog "WARNING: Verify-NativeInstall reported failures"
+      }
+    }
   }
 }
 
