@@ -153,6 +153,25 @@ textarea {
   opacity: 0.9;
 }
 
+/* Real app icon variant: the PNG already carries its own dark rounded-square
+   background + cyan glow (VRC-Audio/Video-Server family), so drop the CSS glyph
+   gradient/border/glow and just render the image. */
+.brand-logo {
+  background: none;
+  border: none;
+  box-shadow: none;
+  object-fit: cover;
+  display: block;
+}
+.brand-logo::after {
+  content: none;
+}
+.brand-logo-lg {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+}
+
 .nav-group {
   display: flex;
   flex-direction: column;

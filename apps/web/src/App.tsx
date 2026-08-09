@@ -12,6 +12,7 @@ import AdminPage from "./pages/AdminPage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import ImportsPage from "./pages/ImportsPage";
 import { getTheme, toggleTheme, type Theme } from "./theme";
+import appIcon from "./assets/app-icon.png";
 
 function Shell({ user, onLogout, children }: { user: User; onLogout: () => void; children: ReactNode }) {
   const loc = useLocation();
@@ -23,7 +24,7 @@ function Shell({ user, onLogout, children }: { user: User; onLogout: () => void;
     <div className="app-shell with-nav">
       <aside className="sidenav">
         <div className="brand">
-          <div className="brand-mark" aria-hidden />
+          <img className="brand-mark brand-logo" src={appIcon} alt="" aria-hidden />
           <strong>Media Engine</strong>
         </div>
         <nav className="nav-group">
