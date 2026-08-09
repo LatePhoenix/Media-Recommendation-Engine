@@ -12,7 +12,9 @@ param(
   [ValidateSet("install", "start", "stop", "uninstall", "status")]
   [string]$Action,
 
-  [string]$InstallRoot = ""
+  [string]$InstallRoot = "",
+
+  [string]$DataRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +23,9 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $InstallRoot) { $InstallRoot = Join-Path $RepoRoot "dist\native-windows" }
 $InstallRoot = [System.IO.Path]::GetFullPath($InstallRoot)
 $WinSwRoot = Join-Path $InstallRoot "runtime\winsw"
+
+if (-not $DataRoot) { $DataRoot = Join-Path $env:ProgramData "MediaRecommendationEngine" }
+$DataRoot = [System.IO.Path]::GetFullPath($DataRoot)
 
 # Order matters for start/stop.
 $StartOrder = @(
@@ -128,6 +133,38 @@ function Test-NeedsLocalService([string]$Id) {
   return ($qc -notmatch "LOCAL SERVICE|LocalService")
 }
 
+function Test-PostgresReady([int]$TimeoutSec = 30) {
+  # WinSW/SCM report "Running" the instant the child launches, but PostgreSQL under a
+  # bad account/ACL exits immediately and WinSW's onfailure-restart masks it. The only
+  # trustworthy signal is that 5432 actually accepts connections.
+  $pgIsReady = Join-Path $InstallRoot "runtime\postgres\bin\pg_isready.exe"
+  for ($elapsed = 0; $elapsed -lt $TimeoutSec; $elapsed += 2) {
+    if (Test-Path -LiteralPath $pgIsReady) {
+      & $pgIsReady -h 127.0.0.1 -p 5432 -q 2>$null | Out-Null
+      if ($LASTEXITCODE -eq 0) { return $true }
+    } elseif ((Test-NetConnection -ComputerName 127.0.0.1 -Port 5432 -WarningAction SilentlyContinue).TcpTestSucceeded) {
+      return $true
+    }
+    Start-Sleep -Seconds 2
+  }
+  return $false
+}
+
+function Repair-PostgresLocalService {
+  # Re-apply the two things PostgreSQL needs to run unprivileged: the LocalService
+  # logon account, and full control of its data/log dirs for that account.
+  Set-LocalServiceAccount -Id "mediarec-postgres"
+  $acct = "NT AUTHORITY\LOCAL SERVICE"
+  $dataDir = Join-Path $DataRoot "postgres\data"
+  $logDir = Join-Path $DataRoot "logs\mediarec-postgres"
+  if (Test-Path -LiteralPath $dataDir) {
+    & icacls.exe $dataDir /grant "${acct}:(OI)(CI)F" /T /C /Q | Out-Null
+  }
+  if (Test-Path -LiteralPath $logDir) {
+    & icacls.exe $logDir /grant "${acct}:(OI)(CI)M" /T /C /Q | Out-Null
+  }
+}
+
 if ($Action -ne "status") {
   Assert-Admin
 }
@@ -180,7 +217,29 @@ try {
       }
       "start" {
         & $exe start
-        if ($LASTEXITCODE -ne 0) {
+        if ($id -eq "mediarec-postgres") {
+          # Gate on real connectivity, not SCM's "Running". If it never accepts
+          # connections, the usual cause is the LocalSystem/ACL regression -> self-heal
+          # (re-apply LocalService account + data-dir ACLs) and retry once. Only then,
+          # if it is still dead, fail loudly so the install can never report false success.
+          if (-not (Test-PostgresReady -TimeoutSec 30)) {
+            Write-Host "  postgres not accepting connections on 5432 - self-healing account/ACLs" -ForegroundColor Yellow
+            Stop-MediaRecService -Exe $exe -Id $id
+            Repair-PostgresLocalService
+            & $exe start 2>$null | Out-Null
+            sc.exe start $id 2>$null | Out-Null
+            if (-not (Test-PostgresReady -TimeoutSec 45)) {
+              $acctNow = (Get-CimInstance Win32_Service -Filter "Name='$id'" -ErrorAction SilentlyContinue).StartName
+              throw "$id did not accept connections on 127.0.0.1:5432 after self-heal (account=$acctNow). See $DataRoot\logs\mediarec-postgres\*.err.log"
+            }
+          }
+          # Post-start account verification (#2): confirm SCM still records LocalService.
+          $qc = & sc.exe qc $id 2>&1 | Out-String
+          if ($qc -notmatch "LOCAL SERVICE|LocalService") {
+            throw "$id is serving but not registered as LocalService after start. sc qc:`n$qc"
+          }
+          Write-Host "  postgres accepting connections on 5432 (account verified LocalService)" -ForegroundColor Green
+        } elseif ($LASTEXITCODE -ne 0) {
           sc.exe start $id 2>$null | Out-Null
           Start-Sleep -Seconds 2
           $svc = Get-Service -Name $id -ErrorAction SilentlyContinue

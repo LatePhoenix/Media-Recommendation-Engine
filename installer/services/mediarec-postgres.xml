@@ -19,9 +19,13 @@
     <sizeThreshold>10240</sizeThreshold>
     <keepFiles>8</keepFiles>
   </log>
-  <!-- LocalSystem is rejected by PostgreSQL on Windows ("administrative permissions"). -->
+  <!-- LocalSystem is rejected by PostgreSQL on Windows ("administrative permissions").
+       <allowservicelogon> grants the account the "Log on as a service" right so a bare
+       `winsw install` sets the account without falling back to LocalSystem. The install
+       scripts still WMI-switch + verify + health-gate as the real guarantee. -->
   <serviceaccount>
     <username>NT AUTHORITY\LocalService</username>
+    <allowservicelogon>true</allowservicelogon>
   </serviceaccount>
   <onfailure action="restart" delay="5 sec"/>
   <onfailure action="restart" delay="10 sec"/>
